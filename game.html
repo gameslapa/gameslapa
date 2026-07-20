@@ -1,1 +1,2515 @@
-РАЗРАБОТКА 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Выживи у Влада</title>
+    <style>
+        /* ... (базовые стили без изменений) ... */
+        /* ГЛОБАЛЬНЫЙ СБРОС */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+            touch-action: manipulation;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ЭКРАН ЗАГРУЗКИ */
+        .loading-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 100;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #b8860b;
+            font-family: 'Courier New', monospace;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+        .loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid #2a2a2a;
+            border-top: 3px solid #b8860b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            font-size: clamp(0.9rem, 2vw, 1.2rem);
+            letter-spacing: 2px;
+            color: #8a7a5a;
+        }
+        .loading-progress {
+            margin-top: 12px;
+            font-size: 0.8rem;
+            color: #5a4a2a;
+        }
+
+        /* СЦЕНА — фото на весь экран с обрезкой (cover) */
+        .scene {
+            flex: 1;
+            position: relative;
+            background-color: #0a0a0a;
+            background-image: url('https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5432.jpeg');
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center center;
+            min-height: 0;
+            width: 100%;
+            cursor: default;
+            transition: filter 0.8s ease, background-image 0.6s ease;
+            touch-action: none;
+        }
+        .scene.blurred {
+            filter: blur(14px) brightness(0.6);
+            transition: filter 0.9s ease;
+        }
+        .scene.chase {
+            animation: chaseShake 0.15s infinite alternate;
+            filter: blur(6px) brightness(0.5);
+        }
+        @keyframes chaseShake {
+            0% { transform: translate(-8px, -5px) rotate(-1deg); filter: blur(8px) brightness(0.4); }
+            25% { transform: translate(10px, 7px) rotate(2deg); filter: blur(5px) brightness(0.6); }
+            50% { transform: translate(-12px, 8px) rotate(-2deg); filter: blur(10px) brightness(0.3); }
+            75% { transform: translate(6px, -10px) rotate(1deg); filter: blur(7px) brightness(0.5); }
+            100% { transform: translate(-5px, 6px) rotate(-1deg); filter: blur(9px) brightness(0.4); }
+        }
+        .chase-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 50;
+            color: #ff3333;
+            font-size: clamp(2rem, 8vw, 5rem);
+            font-weight: 900;
+            text-shadow: 0 0 40px rgba(255, 0, 0, 0.7);
+            letter-spacing: 4px;
+            animation: chasePulse 0.3s infinite alternate;
+            pointer-events: none;
+            text-align: center;
+            opacity: 0;
+            display: none;
+            transition: opacity 0.5s;
+        }
+        .chase-text.visible {
+            opacity: 1;
+            display: block;
+        }
+        @keyframes chasePulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+            100% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
+        }
+
+        /* ВРЕМЯ */
+        .time-display {
+            position: absolute;
+            top: max(14px, env(safe-area-inset-top, 14px));
+            right: max(14px, env(safe-area-inset-right, 14px));
+            background: rgba(0, 0, 0, 0.6);
+            padding: 4px 14px;
+            border-radius: 30px;
+            color: #ffd966;
+            font-size: clamp(0.65rem, 1.8vw, 1rem);
+            font-weight: bold;
+            border: 1px solid #4a3a1a;
+            backdrop-filter: blur(4px);
+            z-index: 20;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+
+        /* ИНДИКАТОР ЗЛОСТИ ВЛАДА */
+        .anger-meter {
+            position: absolute;
+            top: max(14px, env(safe-area-inset-top, 14px));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 25;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            border-radius: 30px;
+            padding: 6px 16px;
+            border: 1px solid #ff4444;
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: none;
+        }
+        .anger-meter .label {
+            color: #ff6666;
+            font-size: 0.7rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(255,0,0,0.3);
+        }
+        .anger-meter .bar-bg {
+            width: 120px;
+            height: 8px;
+            background: #2a1a1a;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #441111;
+        }
+        .anger-meter .bar-fill {
+            height: 100%;
+            width: 15%;
+            background: linear-gradient(90deg, #ff6644, #ff0000);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+        .anger-meter .percent {
+            color: #ff8888;
+            font-size: 0.7rem;
+            font-weight: bold;
+            min-width: 36px;
+            text-align: center;
+        }
+
+        /* Тряска экрана */
+        .scene.shake {
+            animation: shake 0.15s infinite alternate;
+        }
+        @keyframes shake {
+            0% { transform: translate(-6px, -4px) rotate(-1deg); }
+            100% { transform: translate(6px, 4px) rotate(1deg); }
+        }
+
+        .admin-skip {
+            position: absolute;
+            top: max(14px, env(safe-area-inset-top, 14px));
+            left: max(14px, env(safe-area-inset-left, 14px));
+            z-index: 999;
+            background: rgba(255, 0, 0, 0.6);
+            color: #fff;
+            border: 2px solid #ff6666;
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            font-family: 'Courier New', monospace;
+            cursor: pointer;
+            pointer-events: auto !important;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+            text-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }
+        .admin-skip:hover {
+            opacity: 1;
+        }
+        .admin-skip:active {
+            transform: scale(0.95);
+        }
+
+        /* СЮЖЕТНЫЕ КНОПКИ */
+        .next-btn, .finger-icon, .third-btn {
+            position: absolute;
+            width: 64px;
+            height: 64px;
+            background: rgba(255, 255, 255, 0.7) !important;
+            border: 3px solid #b8860b !important;
+            border-radius: 50% !important;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 0 30px rgba(184, 134, 11, 0.4) !important;
+            cursor: pointer;
+            z-index: 35;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            touch-action: auto !important;
+            pointer-events: none;
+            opacity: 0;
+            transform: scale(0.7);
+            padding: 0;
+            overflow: visible;
+            will-change: left, top;
+        }
+        .next-btn img, .finger-icon img, .third-btn img {
+            width: 60%;
+            height: 60%;
+            object-fit: contain;
+            filter: brightness(0.2);
+            display: block;
+            pointer-events: none;
+        }
+        .next-btn.visible, .finger-icon.visible, .third-btn.visible {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            transform: scale(1);
+        }
+        .next-btn:active, .finger-icon:active, .third-btn:active {
+            transform: scale(0.85);
+            box-shadow: 0 0 50px rgba(184, 134, 11, 0.6) !important;
+        }
+        .next-btn.hidden, .finger-icon.hidden, .third-btn.hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transform: scale(0.5);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        /* КНОПКИ ЗАДАНИЙ */
+        .task-btn {
+            position: absolute;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(255, 215, 0, 0.2);
+            backdrop-filter: blur(6px);
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+            cursor: pointer;
+            z-index: 35;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+            pointer-events: auto !important;
+            opacity: 0;
+            transform: scale(0.7);
+        }
+        .task-btn.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .task-btn:active {
+            transform: scale(0.85);
+            box-shadow: 0 0 50px rgba(255, 215, 0, 0.5);
+        }
+        .task-btn img {
+            width: 60%;
+            height: 60%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 6px rgba(255,215,0,0.3));
+        }
+
+        /* НАВИГАЦИОННЫЕ КНОПКИ */
+        .nav-btn-fixed {
+            position: absolute;
+            right: 20px;
+            z-index: 60;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(10, 10, 10, 0.7);
+            backdrop-filter: blur(8px);
+            border: 2px solid #b8860b;
+            color: #ffd966;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            pointer-events: auto !important;
+            transition: background 0.15s, transform 0.15s;
+            box-shadow: 0 0 20px rgba(184, 134, 11, 0.2);
+            touch-action: auto;
+            font-family: 'Courier New', monospace;
+            line-height: 1;
+        }
+        .nav-btn-fixed:active {
+            transform: scale(0.9);
+            background: rgba(184, 134, 11, 0.3);
+        }
+        .nav-btn-fixed:disabled {
+            opacity: 0.3;
+            pointer-events: none !important;
+        }
+        #navUpBtn {
+            bottom: 90px;
+        }
+        #navDownBtn {
+            bottom: 20px;
+        }
+        .floor-indicator {
+            position: absolute;
+            right: 20px;
+            bottom: 160px;
+            z-index: 55;
+            color: #ffd966;
+            font-size: 1rem;
+            font-family: 'Courier New', monospace;
+            text-align: right;
+            text-shadow: 0 0 20px rgba(0,0,0,0.8);
+            display: block;
+            background: rgba(0,0,0,0.4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            backdrop-filter: blur(4px);
+            border: 1px solid #b8860b33;
+        }
+
+        /* МОДАЛЬНОЕ ОКНО ДЛЯ ВВОДА КОДА */
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-box {
+            background: #1a1a1a;
+            border: 2px solid #b8860b;
+            border-radius: 20px;
+            padding: 30px 24px 24px;
+            max-width: 320px;
+            width: 85%;
+            text-align: center;
+            box-shadow: 0 0 60px rgba(184, 134, 11, 0.2);
+        }
+        .modal-box h2 {
+            color: #ffd966;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+            font-weight: 400;
+        }
+        .modal-box input {
+            width: 100%;
+            padding: 12px;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            border-radius: 12px;
+            color: #eee;
+            font-size: 1.8rem;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 4px;
+            outline: none;
+            margin-bottom: 18px;
+        }
+        .modal-box input:focus {
+            border-color: #b8860b;
+        }
+        .modal-box .btn-row {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+        .modal-box .btn-row button {
+            background: #2a2a2a;
+            border: 1px solid #555;
+            color: #eee;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-family: 'Courier New', monospace;
+            flex: 1;
+        }
+        .modal-box .btn-row button:hover {
+            background: #3a3a3a;
+        }
+        .modal-box .btn-row .btn-primary {
+            background: #b8860b;
+            border-color: #b8860b;
+            color: #fff;
+        }
+        .modal-box .btn-row .btn-primary:hover {
+            background: #d49c1a;
+        }
+        .modal-box .error-msg {
+            color: #ff6b6b;
+            font-size: 0.8rem;
+            margin-top: 8px;
+            min-height: 1.2em;
+        }
+
+        /* GAME OVER (скример) */
+        .gameover-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 600;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        .gameover-overlay.active {
+            display: flex;
+        }
+        .gameover-overlay h1 {
+            font-size: 4rem;
+            color: #ff3333;
+            text-shadow: 0 0 40px rgba(255, 0, 0, 0.5);
+            letter-spacing: 8px;
+            font-weight: 900;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.7; transform: scale(0.98); }
+            100% { opacity: 1; transform: scale(1.02); }
+        }
+        .gameover-overlay .sub {
+            color: #888;
+            font-size: 1rem;
+            margin-top: 12px;
+            letter-spacing: 2px;
+        }
+
+        /* ОВЕРЛЕЙ МИНИ-ИГР */
+        .minigame-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 700;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .minigame-overlay.active {
+            display: flex;
+        }
+        .minigame-box {
+            background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+            border-radius: 30px;
+            padding: 30px 24px 24px;
+            max-width: 420px;
+            width: 100%;
+            border: 1px solid #b8860b;
+            box-shadow: 0 0 60px rgba(184, 134, 11, 0.15);
+            position: relative;
+        }
+        .minigame-box h2 {
+            color: #ffd700;
+            font-size: 1.3rem;
+            text-align: center;
+            margin-bottom: 16px;
+            letter-spacing: 2px;
+            font-weight: 400;
+            text-shadow: 0 0 20px rgba(255,215,0,0.2);
+        }
+        .minigame-box .task-desc {
+            color: #aaa;
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+        .minigame-box .game-area {
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            padding: 16px;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #333;
+            margin-bottom: 16px;
+            position: relative;
+            overflow: hidden;
+        }
+        .minigame-box .game-area svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .minigame-box .game-controls {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .minigame-box .game-controls button {
+            background: #3a3a3a;
+            border: 1px solid #555;
+            color: #eee;
+            padding: 8px 20px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-family: 'Courier New', monospace;
+            flex: 1;
+            min-width: 80px;
+        }
+        .minigame-box .game-controls button:hover {
+            background: #4a4a4a;
+        }
+        .minigame-box .game-controls button.primary {
+            background: #b8860b;
+            border-color: #b8860b;
+            color: #fff;
+        }
+        .minigame-box .game-controls button.primary:hover {
+            background: #d49c1a;
+        }
+        .minigame-box .game-controls button:disabled {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+        .minigame-box .cooldown-info {
+            color: #888;
+            font-size: 0.7rem;
+            text-align: center;
+            margin-top: 8px;
+            min-height: 1.2em;
+        }
+        .minigame-box .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 8px;
+            transition: color 0.2s;
+        }
+        .minigame-box .close-btn:hover {
+            color: #fff;
+        }
+
+        /* СТИЛИ ДЛЯ НОВЫХ МИНИ-ИГР */
+        .game-water {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            width: 100%;
+            height: 100%;
+            min-height: 160px;
+            position: relative;
+        }
+        .game-water .flower-pot {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+        .game-water .flower-pot img {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        .game-water .flower-pot .pot-base {
+            width: 60px;
+            height: 30px;
+            background: linear-gradient(180deg, #8B4513, #654321);
+            border-radius: 0 0 20px 20px;
+            margin-top: -4px;
+            box-shadow: inset 0 -6px 0 #3d2b1f;
+        }
+        .game-water .water-glass {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: grab;
+            transition: transform 0.2s, filter 0.2s;
+            touch-action: none;
+        }
+        .game-water .water-glass:active {
+            cursor: grabbing;
+        }
+        .game-water .water-glass img {
+            width: 60px;
+            height: 80px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        .game-water .water-glass.dragging {
+            transform: scale(1.1);
+            filter: drop-shadow(0 8px 16px rgba(0,0,0,0.5));
+        }
+        .game-water .water-glass.dropped {
+            transform: scale(0.9);
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .game-water .progress-ring {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 8px;
+            background: #2a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #444;
+        }
+        .game-water .progress-ring .fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #4a8, #2a6);
+            border-radius: 10px;
+            transition: width 0.1s;
+        }
+        .game-water .hint {
+            color: #aaa;
+            font-size: 0.8rem;
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .game-puddle {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            min-height: 160px;
+            gap: 12px;
+        }
+        .game-puddle .toilet {
+            font-size: 4rem;
+            cursor: pointer;
+            transition: transform 0.1s;
+            user-select: none;
+            touch-action: none;
+        }
+        .game-puddle .toilet:active {
+            transform: scale(0.9);
+        }
+        .game-puddle .toilet img {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        }
+        .game-puddle .puddle-area {
+            width: 120px;
+            height: 40px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse, #2a4a3a, #1a2a2a);
+            transition: all 0.5s;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #3a5a4a;
+        }
+        .game-puddle .puddle-area .liquid {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(180deg, #ffd700, #cc9900);
+            border-radius: 50%;
+            transition: height 0.3s ease;
+            box-shadow: inset 0 -4px 8px rgba(0,0,0,0.3);
+        }
+        .game-puddle .puddle-area .liquid.filled {
+            height: 80%;
+            animation: slosh 0.3s ease;
+        }
+        @keyframes slosh {
+            0% { height: 60%; }
+            50% { height: 90%; }
+            100% { height: 80%; }
+        }
+        .game-puddle .progress-text {
+            color: #aaa;
+            font-size: 0.8rem;
+            min-height: 1.2em;
+        }
+
+        /* КООРДИНАТЫ (отладка) */
+        .debug-coord {
+            position: absolute;
+            bottom: max(10px, env(safe-area-inset-bottom, 10px));
+            left: max(10px, env(safe-area-inset-left, 10px));
+            background: rgba(0, 0, 0, 0.85);
+            color: #00ffc8;
+            font-size: clamp(0.6rem, 1.6vw, 0.9rem);
+            padding: 6px 18px;
+            border-radius: 20px;
+            border-left: 4px solid #00ffc8;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 40;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 0 30px rgba(0, 255, 200, 0.1);
+            opacity: 1 !important;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+            min-width: 100px;
+            text-align: center;
+            visibility: visible !important;
+        }
+        .debug-coord.highlight {
+            background: rgba(0, 255, 200, 0.15);
+            border-color: #00ffc8;
+            box-shadow: 0 0 40px rgba(0, 255, 200, 0.2);
+            transform: scale(1.05);
+        }
+
+        /* ДИАЛОГ */
+        .dialogue-area {
+            background: rgba(10, 10, 10, 0.92);
+            backdrop-filter: blur(6px);
+            border-top: 1px solid #2a2a2a;
+            padding: 8px 16px;
+            min-height: 52px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            position: relative;
+            padding-bottom: max(8px, env(safe-area-inset-bottom, 8px));
+            transition: opacity 0.6s ease, transform 0.5s ease, min-height 0.5s ease, padding 0.5s ease;
+            transform: translateY(0);
+            z-index: 10;
+        }
+        .dialogue-area.hidden {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+            min-height: 0;
+            padding: 0 16px;
+            height: 0;
+            overflow: hidden;
+            border-top: none;
+        }
+        .dialogue-text {
+            color: #e6dccb;
+            font-size: clamp(0.75rem, 1.8vw, 1rem);
+            line-height: 1.4;
+            font-family: 'Courier New', monospace;
+            text-shadow: 0 0 8px rgba(0,0,0,0.9);
+            word-break: break-word;
+            padding-right: 10px;
+            min-height: 1.4em;
+        }
+        .dialogue-text::before {
+            content: '▸ ';
+            color: #b8860b;
+        }
+        .dev-credit {
+            position: absolute;
+            bottom: 2px;
+            right: 12px;
+            color: #444;
+            font-size: 0.45rem;
+            opacity: 0.12;
+            pointer-events: none;
+        }
+
+        /* АДАПТАЦИЯ */
+        @media (max-width: 600px) {
+            .next-btn, .finger-icon, .third-btn { width: 50px; height: 50px; }
+            .nav-btn-fixed { width: 48px; height: 48px; font-size: 1.5rem; right: 12px; }
+            #navUpBtn { bottom: 72px; }
+            #navDownBtn { bottom: 12px; }
+            .floor-indicator { right: 12px; bottom: 130px; font-size: 0.8rem; padding: 2px 10px; }
+            .anger-meter .bar-bg { width: 80px; }
+            .anger-meter { padding: 4px 12px; }
+            .minigame-box { padding: 20px 16px; max-width: 95%; }
+            .task-btn { width: 46px; height: 46px; }
+            .dialogue-area { min-height: 44px; padding: 6px 12px; }
+            .time-display { font-size: 0.6rem; padding: 3px 10px; }
+            .debug-coord { font-size: 0.55rem; padding: 4px 12px; min-width: 70px; }
+            .modal-box { padding: 20px 16px; }
+            .modal-box input { font-size: 1.4rem; padding: 10px; }
+            .gameover-overlay h1 { font-size: 2.8rem; }
+            .chase-text { font-size: clamp(1.5rem, 6vw, 3rem); }
+            .admin-skip { font-size: 0.6rem; padding: 4px 10px; }
+            .game-water .flower-pot img { width: 60px; height: 60px; }
+            .game-water .water-glass img { width: 45px; height: 60px; }
+            .game-puddle .toilet img { width: 60px; height: 60px; }
+            .game-puddle .puddle-area { width: 90px; height: 30px; }
+        }
+        @media (max-width: 400px) {
+            .next-btn, .finger-icon, .third-btn { width: 44px; height: 44px; }
+            .nav-btn-fixed { width: 42px; height: 42px; font-size: 1.2rem; }
+            #navUpBtn { bottom: 62px; }
+            #navDownBtn { bottom: 10px; }
+            .floor-indicator { bottom: 110px; font-size: 0.7rem; }
+            .anger-meter .bar-bg { width: 60px; }
+            .task-btn { width: 40px; height: 40px; }
+            .dialogue-text { font-size: 0.7rem; }
+            .debug-coord { font-size: 0.5rem; padding: 3px 10px; min-width: 60px; }
+            .modal-box input { font-size: 1.2rem; }
+            .gameover-overlay h1 { font-size: 2.2rem; }
+            .admin-skip { font-size: 0.5rem; padding: 3px 8px; }
+            .game-water { gap: 20px; }
+            .game-water .flower-pot img { width: 50px; height: 50px; }
+            .game-water .water-glass img { width: 38px; height: 50px; }
+            .game-puddle .toilet img { width: 50px; height: 50px; }
+            .game-puddle .puddle-area { width: 70px; height: 25px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- ЗАГРУЗКА -->
+        <div class="loading-screen" id="loadingScreen">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">ЗАГРУЗКА ПОДЪЕЗДА</div>
+            <div class="loading-progress" id="loadingProgress">0 / 21</div>
+        </div>
+
+        <!-- СЦЕНА -->
+        <div class="scene" id="scene">
+            <div class="time-display" id="timeDisplay">
+                <span id="clockText">03:17</span>
+            </div>
+
+            <!-- ИНДИКАТОР ЗЛОСТИ ВЛАДА -->
+            <div class="anger-meter" id="angerMeter">
+                <span class="label">😡</span>
+                <div class="bar-bg">
+                    <div class="bar-fill" id="angerFill" style="width:15%"></div>
+                </div>
+                <span class="percent" id="angerPercent">15%</span>
+            </div>
+
+            <button class="admin-skip" id="adminSkip">⏭ Skip</button>
+            <div class="chase-text" id="chaseText">УБЕГАЕМ ОТ ВЛАДА</div>
+
+            <!-- СЮЖЕТНЫЕ КНОПКИ -->
+            <button class="next-btn" id="nextBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/3202/3202907.png" alt="Идти">
+            </button>
+            <div class="finger-icon" id="fingerIcon">
+                <img src="https://cdn-icons-png.flaticon.com/512/96/96933.png" alt="Нажать">
+            </div>
+            <button class="third-btn" id="thirdBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/96/96933.png" alt="Нажать">
+            </button>
+
+            <!-- КНОПКИ ЗАДАНИЙ -->
+            <button class="task-btn" id="taskBtn1" style="left:526px; top:243px;" data-task="water">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <button class="task-btn" id="taskBtn2" style="left:556px; top:234px;" data-task="puddle">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <button class="task-btn" id="taskBtn3" style="left:215px; top:201px;" data-task="broom">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+
+            <!-- НАВИГАЦИОННЫЕ КНОПКИ -->
+            <div class="floor-indicator" id="floorIndicator">4 этаж</div>
+            <button class="nav-btn-fixed" id="navUpBtn">▲</button>
+            <button class="nav-btn-fixed" id="navDownBtn">▼</button>
+
+            <div class="debug-coord" id="debugCoord">📍 X: 0, Y: 0</div>
+        </div>
+
+        <!-- ДИАЛОГ -->
+        <div class="dialogue-area" id="dialogueArea">
+            <div class="dialogue-text" id="dialogueText">все начиналось возле старой 4 этажки Влада</div>
+            <div class="dev-credit">dev: кликни для координат</div>
+        </div>
+
+        <!-- МОДАЛЬНОЕ ОКНО ДОМОФОНА -->
+        <div class="modal-overlay" id="modalOverlay">
+            <div class="modal-box">
+                <h2>🔐 ВВЕДИТЕ КОД</h2>
+                <input type="text" id="codeInput" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+                <div class="error-msg" id="errorMsg"></div>
+                <div class="btn-row">
+                    <button id="modalCancel">Отмена</button>
+                    <button id="modalConfirm" class="btn-primary">Вход</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- GAME OVER (скример) -->
+        <div class="gameover-overlay" id="gameoverOverlay">
+            <h1>GAME OVER</h1>
+            <div class="sub">Влад не прощает ошибок</div>
+        </div>
+
+        <!-- ОВЕРЛЕЙ МИНИ-ИГРЫ (общий) -->
+        <div class="minigame-overlay" id="minigameOverlay">
+            <div class="minigame-box" id="minigameBox">
+                <button class="close-btn" id="minigameClose">&times;</button>
+                <h2 id="minigameTitle">Задание</h2>
+                <div class="task-desc" id="minigameDesc">Выполните задание</div>
+                <div class="game-area" id="minigameArea">
+                    <!-- Содержимое будет генерироваться JS -->
+                </div>
+                <div class="game-controls" id="minigameControls">
+                    <button class="primary" id="minigameAction">Выполнить</button>
+                    <button id="minigameCancel">Отмена</button>
+                </div>
+                <div class="cooldown-info" id="minigameCooldown"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            "use strict";
+
+            // --- ЭЛЕМЕНТЫ ---
+            const scene = document.getElementById('scene');
+            const dialogueText = document.getElementById('dialogueText');
+            const dialogueArea = document.getElementById('dialogueArea');
+            const debugCoord = document.getElementById('debugCoord');
+            const clockText = document.getElementById('clockText');
+            const nextBtn = document.getElementById('nextBtn');
+            const fingerIcon = document.getElementById('fingerIcon');
+            const thirdBtn = document.getElementById('thirdBtn');
+            const chaseText = document.getElementById('chaseText');
+            const loadingScreen = document.getElementById('loadingScreen');
+            const loadingProgress = document.getElementById('loadingProgress');
+            const modalOverlay = document.getElementById('modalOverlay');
+            const codeInput = document.getElementById('codeInput');
+            const errorMsg = document.getElementById('errorMsg');
+            const modalCancel = document.getElementById('modalCancel');
+            const modalConfirm = document.getElementById('modalConfirm');
+            const gameoverOverlay = document.getElementById('gameoverOverlay');
+            const adminSkip = document.getElementById('adminSkip');
+
+            // НАВИГАЦИОННЫЕ КНОПКИ
+            const navUpBtn = document.getElementById('navUpBtn');
+            const navDownBtn = document.getElementById('navDownBtn');
+            const floorIndicator = document.getElementById('floorIndicator');
+
+            // КНОПКИ ЗАДАНИЙ
+            const taskBtn1 = document.getElementById('taskBtn1');
+            const taskBtn2 = document.getElementById('taskBtn2');
+            const taskBtn3 = document.getElementById('taskBtn3');
+
+            // МИНИ-ИГРЫ
+            const minigameOverlay = document.getElementById('minigameOverlay');
+            const minigameBox = document.getElementById('minigameBox');
+            const minigameClose = document.getElementById('minigameClose');
+            const minigameTitle = document.getElementById('minigameTitle');
+            const minigameDesc = document.getElementById('minigameDesc');
+            const minigameArea = document.getElementById('minigameArea');
+            const minigameAction = document.getElementById('minigameAction');
+            const minigameCancel = document.getElementById('minigameCancel');
+            const minigameCooldown = document.getElementById('minigameCooldown');
+
+            // ИНДИКАТОР ЗЛОСТИ
+            const angerFill = document.getElementById('angerFill');
+            const angerPercent = document.getElementById('angerPercent');
+
+            // --- МАССИВ ИЗОБРАЖЕНИЙ ---
+            const IMAGES = [
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5432.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5433.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5441.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5443.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5446.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5525.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5526.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5515.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5523.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5522.jpeg',
+                'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/IMG_5524.jpeg'
+            ];
+            const FLOOR_NAMES = ['', '', '', '', '4 этаж', '4 этаж коридор', '3 этаж', '3 этаж коридор', '2 этаж', '2 этаж коридор', '1 этаж'];
+            const MIN_FLOOR = 4;
+            const MAX_FLOOR = IMAGES.length - 1;
+
+            // --- АУДИО ---
+            const AUDIO_BLUR = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/5430e089a52a3a1.mp3';
+            const AUDIO_AMBIENT = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/c2b241eaaf1726a.mp3';
+            const AUDIO_AMBIENT_3 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/4f51346b1355c30.mp3';
+            const AUDIO_VOICE = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Голос%20002.m4a';
+            const AUDIO_CODE_FAIL = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Голос%20011.m4a';
+            const AUDIO_CODE_67 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Gazan%20-%2067%20(Six%20Seven)%20(новая%20музыка%202026).mp3';
+            const AUDIO_CODE_17 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/202607151440_mix.m4a';
+            const AUDIO_KNOCK = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/8307-obemnyi-stuk-v-dver.mp3';
+            const AUDIO_AFTER_KNOCK = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/0e515af90bfbfda.mp3';
+            const AUDIO_SLIDE4 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/202607151940_mix.mp3';
+            const AUDIO_VOICE_008 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Голос%20008.m4a';
+            const AUDIO_VOICE_012 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Голос%20012.m4a';
+            const AUDIO_VOICE_007 = 'https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/Голос%20007.m4a';
+            const ICON_URL = 'https://cdn-icons-png.flaticon.com/512/3202/3202907.png';
+            const ICON_FINGER = 'https://cdn-icons-png.flaticon.com/512/96/96933.png';
+
+            // --- ПЕРЕМЕННЫЕ ДЛЯ ЗВУКА ---
+            let ambientAudio = null, blurAudio = null, voiceAudio = null, codeFailAudio = null, code67Audio = null, code17Audio = null;
+            let ambient3Audio = null, knockAudio = null, afterKnockAudio = null;
+            let slide4Audio = null, voice008Audio = null, voice012Audio = null, voice007Audio = null;
+            let ambientLoaded = false, blurLoaded = false, voiceLoaded = false, codeFailLoaded = false, code67Loaded = false, code17Loaded = false;
+            let ambient3Loaded = false, knockLoaded = false, afterKnockLoaded = false;
+            let slide4Loaded = false, voice008Loaded = false, voice012Loaded = false, voice007Loaded = false;
+            let isAmbientPlaying = false, isBlurPlaying = false, isVoicePlaying = false;
+            let isAmbient3Playing = false;
+            let audioActivated = false, voiceEnded = false;
+            let isGameOver = false;
+            let isSecondSlide = false, isThirdSlide = false, isFourthSlide = false;
+            let isChaseActive = false, isChaseFinished = false;
+            let code17Played = false, thirdSlideLock = false, isSlide4Playing = false;
+
+            // --- ПЕРЕМЕННЫЕ ДЛЯ ЗЛОСТИ ВЛАДА ---
+            let angerLevel = 15;
+            let angerInterval = null;
+            let isShaking = false;
+            let gameOverTriggered = false;
+
+            // --- ПЕРЕМЕННЫЕ ДЛЯ МИНИ-ИГР ---
+            let cooldowns = {
+                water: 0,
+                puddle: 0,
+                broom: 0
+            };
+            let taskCooldownTimers = {};
+
+            // --- ТЕКУЩИЙ СЛАЙД ---
+            let currentSlide = 4;
+
+            // --- РАЗМЕРЫ ИЗОБРАЖЕНИЙ ---
+            let imgSizes = {};
+
+            // --- СЧЁТЧИК ЗАГРУЗКИ ---
+            let loadedResources = 0;
+            const totalLoads = IMAGES.length + 2 + 12;
+
+            function updateProgress() {
+                loadedResources++;
+                loadingProgress.textContent = `${loadedResources} / ${totalLoads}`;
+                if (loadedResources >= totalLoads) {
+                    startGame();
+                }
+            }
+
+            // --- ЗАГРУЗКА ---
+            function loadWithTimeout(loader, timeoutMs = 10000) {
+                return new Promise((resolve) => {
+                    const timer = setTimeout(() => {
+                        console.warn('⚠️ Таймаут загрузки');
+                        resolve(false);
+                    }, timeoutMs);
+                    loader((result) => {
+                        clearTimeout(timer);
+                        resolve(result);
+                    });
+                });
+            }
+
+            function preloadImages() {
+                IMAGES.forEach((url, index) => {
+                    const img = new Image();
+                    const loadPromise = new Promise((resolve) => {
+                        img.onload = () => {
+                            imgSizes[index] = { width: img.width, height: img.height };
+                            resolve(true);
+                        };
+                        img.onerror = () => {
+                            console.warn('⚠️ Ошибка загрузки изображения:', url);
+                            resolve(false);
+                        };
+                        img.src = url;
+                    });
+                    loadWithTimeout((cb) => {
+                        loadPromise.then(() => cb());
+                    }, 10000).finally(() => {
+                        updateProgress();
+                    });
+                });
+            }
+
+            function preloadIcons() {
+                const urls = [ICON_URL, ICON_FINGER];
+                urls.forEach((url) => {
+                    const img = new Image();
+                    const loadPromise = new Promise((resolve) => {
+                        img.onload = () => { resolve(true); };
+                        img.onerror = () => {
+                            console.warn('⚠️ Ошибка загрузки иконки:', url);
+                            resolve(false);
+                        };
+                        img.src = url;
+                    });
+                    loadWithTimeout((cb) => {
+                        loadPromise.then(() => cb());
+                    }, 8000).finally(() => {
+                        updateProgress();
+                    });
+                });
+            }
+
+            function preloadAudio(url, name, callback) {
+                const audio = new Audio();
+                audio.preload = 'auto';
+                audio.volume = 0.5;
+                audio.src = url;
+                audio.load();
+
+                const loadPromise = new Promise((resolve) => {
+                    audio.addEventListener('canplaythrough', () => {
+                        console.log(`✅ ${name} загружен`);
+                        resolve(true);
+                    }, { once: true });
+                    audio.addEventListener('error', (e) => {
+                        console.warn(`⚠️ Ошибка загрузки ${name}:`, e);
+                        resolve(false);
+                    }, { once: true });
+                });
+
+                loadWithTimeout((cb) => {
+                    loadPromise.then((loaded) => {
+                        callback(audio, loaded);
+                        cb();
+                    });
+                }, 10000).finally(() => {
+                    updateProgress();
+                });
+            }
+
+            // --- АКТИВАЦИЯ АУДИО ---
+            function activateAudio() {
+                if (audioActivated) return;
+                audioActivated = true;
+
+                if (ambientAudio && ambientLoaded && !isAmbientPlaying) {
+                    try {
+                        ambientAudio.loop = true;
+                        ambientAudio.volume = 0.3;
+                        const playPromise = ambientAudio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                isAmbientPlaying = true;
+                                console.log('🎵 Фоновая музыка запущена');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка автовоспроизведения фоновой музыки:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка запуска фоновой музыки:', e);
+                    }
+                }
+
+                if (voiceAudio && voiceLoaded && !isVoicePlaying && !voiceEnded) {
+                    try {
+                        voiceAudio.currentTime = 0;
+                        voiceAudio.volume = 0.8;
+                        const playPromise = voiceAudio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                isVoicePlaying = true;
+                                console.log('🔊 Голосовое сообщение запущено');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка воспроизведения голоса:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка запуска голоса:', e);
+                    }
+                }
+            }
+
+            // --- ПОЗИЦИОНИРОВАНИЕ ---
+            function getCoverOffset(imgIndex) {
+                const size = imgSizes[imgIndex];
+                if (!size) return null;
+                const imgW = size.width;
+                const imgH = size.height;
+                const rect = scene.getBoundingClientRect();
+                const containerW = rect.width;
+                const containerH = rect.height;
+                const scaleX = containerW / imgW;
+                const scaleY = containerH / imgH;
+                const scale = Math.max(scaleX, scaleY);
+                const drawW = imgW * scale;
+                const drawH = imgH * scale;
+                const offsetX = (containerW - drawW) / 2;
+                const offsetY = (containerH - drawH) / 2;
+                return { offsetX, offsetY, scale };
+            }
+
+            function positionElement(imgX, imgY, element, imgIndex) {
+                const cover = getCoverOffset(imgIndex);
+                if (!cover) return;
+                const { offsetX, offsetY, scale } = cover;
+                const posX = offsetX + imgX * scale;
+                const posY = offsetY + imgY * scale;
+                element.style.left = posX + 'px';
+                element.style.top = posY + 'px';
+                element.style.transform = 'translate(-50%, -50%) scale(1)';
+            }
+
+            function repositionAll() {
+                if (nextBtn.classList.contains('visible') && !nextBtn.classList.contains('hidden')) {
+                    positionElement(1835, 1451, nextBtn, 0);
+                }
+                if (fingerIcon.classList.contains('visible') && !fingerIcon.classList.contains('hidden')) {
+                    positionElement(1447, 1007, fingerIcon, 1);
+                }
+                if (thirdBtn.classList.contains('visible') && !thirdBtn.classList.contains('hidden')) {
+                    positionElement(2386, 1329, thirdBtn, 2);
+                }
+            }
+
+            // --- НАВИГАЦИЯ ---
+            function updateFloorDisplay() {
+                floorIndicator.textContent = FLOOR_NAMES[currentSlide];
+                navUpBtn.disabled = currentSlide <= MIN_FLOOR;
+                navDownBtn.disabled = currentSlide >= MAX_FLOOR;
+                console.log(`Текущий слайд: ${currentSlide} (${FLOOR_NAMES[currentSlide]})`);
+
+                taskBtn1.classList.toggle('visible', currentSlide === 9);
+                taskBtn2.classList.toggle('visible', currentSlide === 7);
+                taskBtn3.classList.toggle('visible', currentSlide === 6);
+            }
+
+            let isMoving = false;
+
+            function goToFloor(delta) {
+                if (isMoving) return;
+                const nextSlide = currentSlide + delta;
+                if (nextSlide < MIN_FLOOR || nextSlide > MAX_FLOOR) {
+                    console.warn('Граница этажей');
+                    return;
+                }
+                isMoving = true;
+                currentSlide = nextSlide;
+                scene.style.backgroundImage = `url('${IMAGES[currentSlide]}')`;
+                updateFloorDisplay();
+                console.log(`Перешли на ${FLOOR_NAMES[currentSlide]}`);
+                setTimeout(() => {
+                    isMoving = false;
+                }, 100);
+            }
+
+            // --- ОБРАБОТЧИКИ НАВИГАЦИИ ---
+            navDownBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                goToFloor(1);
+            });
+            navDownBtn.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                goToFloor(1);
+            }, { passive: false });
+
+            navUpBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                goToFloor(-1);
+            });
+            navUpBtn.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                goToFloor(-1);
+            }, { passive: false });
+
+            // --- СИСТЕМА ЗЛОСТИ ВЛАДА ---
+            function updateAngerMeter() {
+                angerFill.style.width = angerLevel + '%';
+                angerPercent.textContent = Math.round(angerLevel) + '%';
+                if (angerLevel >= 50 && !isShaking) {
+                    scene.classList.add('shake');
+                    isShaking = true;
+                } else if (angerLevel < 50 && isShaking) {
+                    scene.classList.remove('shake');
+                    isShaking = false;
+                }
+                if (angerLevel >= 100 && !gameOverTriggered) {
+                    triggerGameOver();
+                }
+            }
+
+            function startAngerTimer() {
+                if (angerInterval) return;
+                angerInterval = setInterval(() => {
+                    if (isGameOver) return;
+                    angerLevel = Math.min(100, angerLevel + 0.5);
+                    updateAngerMeter();
+                }, 1000);
+            }
+
+            function stopAngerTimer() {
+                if (angerInterval) {
+                    clearInterval(angerInterval);
+                    angerInterval = null;
+                }
+            }
+
+            function reduceAnger(amount) {
+                angerLevel = Math.max(0, angerLevel - amount);
+                updateAngerMeter();
+                if (angerLevel < 50 && isShaking) {
+                    scene.classList.remove('shake');
+                    isShaking = false;
+                }
+            }
+
+            function triggerGameOver() {
+                if (gameOverTriggered) return;
+                gameOverTriggered = true;
+                isGameOver = true;
+                stopAngerTimer();
+                gameoverOverlay.classList.add('active');
+                console.log('💀 GAME OVER (злость Влада 100%)');
+            }
+
+            // --- НОВЫЕ МИНИ-ИГРЫ ---
+            let currentTaskType = null;
+
+            // ---- ИГРА 1: ПОЛИТЬ ЦВЕТОК (DRAG & DROP) ----
+            function initWaterGame() {
+                const targetDuration = 2 + Math.random() * 4; // 2-6 секунд
+                let holdStart = null;
+                let holdTimer = null;
+                let isCompleted = false;
+
+                minigameArea.innerHTML = `
+                    <div class="game-water" id="waterGame">
+                        <div class="flower-pot" id="flowerPot">
+                            <img src="https://cdn-icons-png.flaticon.com/512/5605/5605057.png" alt="Цветок">
+                            <div class="pot-base"></div>
+                        </div>
+                        <div class="water-glass" id="waterGlass">
+                            <img src="https://cdn-icons-png.flaticon.com/512/1864/1864846.png" alt="Стакан воды">
+                        </div>
+                        <div class="progress-ring">
+                            <div class="fill" id="waterProgress"></div>
+                        </div>
+                        <div class="hint" id="waterHint">💧 Возьми стакан и поднеси к цветку</div>
+                    </div>
+                `;
+
+                const glass = document.getElementById('waterGlass');
+                const pot = document.getElementById('flowerPot');
+                const progress = document.getElementById('waterProgress');
+                const hint = document.getElementById('waterHint');
+
+                let isDragging = false;
+                let isDropped = false;
+
+                // Универсальная функция начала удержания
+                function startHold(e) {
+                    if (isCompleted || isDropped) return;
+                    e.preventDefault();
+                    isDragging = true;
+                    glass.classList.add('dragging');
+                    holdStart = Date.now();
+                    hint.textContent = '⏳ Держи стакан у цветка...';
+                    // Запускаем таймер для обновления прогресса
+                    if (holdTimer) clearInterval(holdTimer);
+                    holdTimer = setInterval(() => {
+                        if (!isDragging || isDropped) {
+                            clearInterval(holdTimer);
+                            return;
+                        }
+                        const elapsed = (Date.now() - holdStart) / 1000;
+                        const pct = Math.min(100, (elapsed / targetDuration) * 100);
+                        progress.style.width = pct + '%';
+                        if (elapsed >= targetDuration) {
+                            // Успех!
+                            clearInterval(holdTimer);
+                            isCompleted = true;
+                            glass.classList.remove('dragging');
+                            glass.classList.add('dropped');
+                            hint.textContent = '✅ Цветок полит!';
+                            onTaskComplete('water');
+                        }
+                    }, 50);
+                }
+
+                function endHold(e) {
+                    if (isCompleted || isDropped) return;
+                    isDragging = false;
+                    glass.classList.remove('dragging');
+                    if (holdTimer) {
+                        clearInterval(holdTimer);
+                        holdTimer = null;
+                    }
+                    // Если прогресс был, но не завершен - сбрасываем
+                    if (!isCompleted) {
+                        progress.style.width = '0%';
+                        hint.textContent = '💧 Возьми стакан и поднеси к цветку';
+                    }
+                }
+
+                // События для мыши
+                glass.addEventListener('mousedown', startHold);
+                document.addEventListener('mouseup', endHold);
+                // События для тач
+                glass.addEventListener('touchstart', startHold, { passive: false });
+                document.addEventListener('touchend', endHold, { passive: false });
+
+                // Отмена, если игрок уводит курсор
+                document.addEventListener('mouseleave', endHold);
+
+                // Сохраняем cleanup для закрытия
+                minigameBox._cleanup = function() {
+                    document.removeEventListener('mouseup', endHold);
+                    document.removeEventListener('touchend', endHold);
+                    document.removeEventListener('mouseleave', endHold);
+                    if (holdTimer) clearInterval(holdTimer);
+                };
+
+                // Кнопка действия не нужна, скрываем
+                minigameAction.style.display = 'none';
+            }
+
+            // ---- ИГРА 2: НАССЫ НА САННЫЙ УГОЛ (БЫСТРЫЕ НАЖАТИЯ) ----
+            function initPuddleGame() {
+                const targetClicks = 5 + Math.floor(Math.random() * 6); // 5-10 кликов
+                let clickCount = 0;
+                let isCompleted = false;
+
+                minigameArea.innerHTML = `
+                    <div class="game-puddle" id="puddleGame">
+                        <div class="toilet" id="toiletBtn">
+                            <img src="https://cdn-icons-png.flaticon.com/512/6152/6152264.png" alt="Туалет">
+                        </div>
+                        <div class="puddle-area" id="puddleArea">
+                            <div class="liquid" id="puddleLiquid"></div>
+                        </div>
+                        <div class="progress-text" id="puddleProgress">0 / ${targetClicks}</div>
+                    </div>
+                `;
+
+                const toilet = document.getElementById('toiletBtn');
+                const liquid = document.getElementById('puddleLiquid');
+                const progressText = document.getElementById('puddleProgress');
+
+                function handleClick(e) {
+                    if (isCompleted) return;
+                    e.preventDefault();
+                    clickCount++;
+                    progressText.textContent = `${clickCount} / ${targetClicks}`;
+                    // Анимация нажатия
+                    toilet.style.transform = 'scale(0.85)';
+                    setTimeout(() => { toilet.style.transform = ''; }, 100);
+                    // Заполняем лужу
+                    const pct = Math.min(100, (clickCount / targetClicks) * 100);
+                    liquid.style.height = pct + '%';
+                    if (pct >= 80) liquid.classList.add('filled');
+                    if (clickCount >= targetClicks) {
+                        isCompleted = true;
+                        liquid.style.height = '80%';
+                        liquid.classList.add('filled');
+                        progressText.textContent = '✅ Задание выполнено!';
+                        onTaskComplete('puddle');
+                    }
+                }
+
+                toilet.addEventListener('click', handleClick);
+                toilet.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
+                    handleClick(e);
+                }, { passive: false });
+
+                // Кнопка действия не нужна
+                minigameAction.style.display = 'none';
+
+                minigameBox._cleanup = function() {
+                    toilet.removeEventListener('click', handleClick);
+                };
+            }
+
+            // ---- ИГРА 3: ПОДМЕСТИ ПОЛ (ОСТАВЛЯЕМ СТАРУЮ, НО УЛУЧШАЕМ) ----
+            function initBroomGame() {
+                // Оставляем старую реализацию, но с улучшенным дизайном
+                minigameArea.innerHTML = `
+                    <div class="broom-area">
+                        <div class="floor">
+                            <div class="dirt" id="dirt1"></div>
+                            <div class="dirt" style="top:40px; left:100px;" id="dirt2"></div>
+                            <div class="dirt" style="top:10px; left:130px;" id="dirt3"></div>
+                        </div>
+                        <div class="broom" id="broomEmoji">🧹</div>
+                    </div>
+                `;
+                minigameAction.textContent = '🧹 Подмести';
+                minigameAction.style.display = 'block';
+                minigameAction.onclick = function() {
+                    const dirts = document.querySelectorAll('.dirt');
+                    dirts.forEach(d => d.classList.add('clean'));
+                    const broom = document.getElementById('broomEmoji');
+                    broom.style.transform = 'rotate(-20deg) scale(1.2)';
+                    setTimeout(() => {
+                        broom.style.transform = '';
+                        onTaskComplete('broom');
+                    }, 600);
+                };
+                minigameBox._cleanup = function() {
+                    // ничего
+                };
+            }
+
+            // --- ОБЩАЯ ФУНКЦИЯ ЗАПУСКА МИНИ-ИГРЫ ---
+            function showMinigame(taskType) {
+                if (isGameOver) return;
+                if (cooldowns[taskType] > 0) {
+                    minigameCooldown.textContent = `⏳ Подождите ${Math.ceil(cooldowns[taskType])} сек.`;
+                    setTimeout(() => {
+                        minigameCooldown.textContent = '';
+                    }, 1500);
+                    return;
+                }
+                // Очищаем предыдущую игру
+                if (minigameBox._cleanup) {
+                    minigameBox._cleanup();
+                }
+                currentTaskType = taskType;
+                minigameOverlay.classList.add('active');
+                const titles = {
+                    water: '💧 Полить цветок',
+                    puddle: '💦 Нассы на санный угол',
+                    broom: '🧹 Подмести пол'
+                };
+                const descs = {
+                    water: 'Возьми стакан и поднеси к цветку, удержи 2-6 секунд',
+                    puddle: 'Быстро нажимай на туалет, чтобы наполнить лужу',
+                    broom: 'Нажми кнопку, чтобы подмести пол'
+                };
+                minigameTitle.textContent = titles[taskType] || 'Задание';
+                minigameDesc.textContent = descs[taskType] || 'Выполните задание';
+                minigameCooldown.textContent = '';
+
+                // Запускаем нужную игру
+                if (taskType === 'water') {
+                    initWaterGame();
+                } else if (taskType === 'puddle') {
+                    initPuddleGame();
+                } else if (taskType === 'broom') {
+                    initBroomGame();
+                }
+            }
+
+            function onTaskComplete(taskType) {
+                reduceAnger(5);
+                cooldowns[taskType] = 60;
+                if (taskCooldownTimers[taskType]) {
+                    clearInterval(taskCooldownTimers[taskType]);
+                }
+                taskCooldownTimers[taskType] = setInterval(() => {
+                    cooldowns[taskType]--;
+                    if (cooldowns[taskType] <= 0) {
+                        clearInterval(taskCooldownTimers[taskType]);
+                        taskCooldownTimers[taskType] = null;
+                        cooldowns[taskType] = 0;
+                    }
+                }, 1000);
+                closeMinigame();
+                minigameCooldown.textContent = '✅ Задание выполнено! -5% злости';
+                setTimeout(() => {
+                    minigameCooldown.textContent = '';
+                }, 2000);
+            }
+
+            function closeMinigame() {
+                if (minigameBox._cleanup) {
+                    minigameBox._cleanup();
+                }
+                minigameOverlay.classList.remove('active');
+                currentTaskType = null;
+                // Показываем кнопку действия для следующих игр
+                minigameAction.style.display = 'block';
+            }
+
+            // --- ОБРАБОТЧИКИ КНОПОК ЗАДАНИЙ ---
+            taskBtn1.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showMinigame('water');
+            });
+            taskBtn1.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                showMinigame('water');
+            }, { passive: false });
+
+            taskBtn2.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showMinigame('puddle');
+            });
+            taskBtn2.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                showMinigame('puddle');
+            }, { passive: false });
+
+            taskBtn3.addEventListener('click', function(e) {
+                e.stopPropagation();
+                showMinigame('broom');
+            });
+            taskBtn3.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                showMinigame('broom');
+            }, { passive: false });
+
+            // --- ЗАКРЫТИЕ МИНИ-ИГРЫ ---
+            minigameClose.addEventListener('click', closeMinigame);
+            minigameCancel.addEventListener('click', closeMinigame);
+            minigameOverlay.addEventListener('click', function(e) {
+                if (e.target === minigameOverlay) {
+                    closeMinigame();
+                }
+            });
+
+            // --- СЮЖЕТНЫЕ ФУНКЦИИ ---
+            function onVoiceEnded() {
+                if (voiceEnded) return;
+                voiceEnded = true;
+                isVoicePlaying = false;
+                console.log('🔇 Голосовое сообщение завершено');
+                nextBtn.classList.remove('hidden');
+                nextBtn.classList.add('visible');
+                nextBtn.style.pointerEvents = 'auto';
+                setTimeout(() => {
+                    positionElement(1835, 1451, nextBtn, 0);
+                }, 10);
+                dialogueText.textContent = "эххх пора идти к Владу...";
+            }
+
+            function goToThirdSlide() {
+                if (ambientAudio && isAmbientPlaying) {
+                    try {
+                        ambientAudio.pause();
+                        ambientAudio.currentTime = 0;
+                        isAmbientPlaying = false;
+                        console.log('🔇 Фоновая музыка остановлена');
+                    } catch (e) {}
+                }
+
+                if (ambient3Audio && ambient3Loaded && !isAmbient3Playing) {
+                    try {
+                        ambient3Audio.loop = true;
+                        ambient3Audio.volume = 0.3;
+                        const playPromise = ambient3Audio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                isAmbient3Playing = true;
+                                console.log('🎵 Фоновый звук 3 слайда запущен');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка запуска фонового звука 3:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка запуска фонового звука 3:', e);
+                    }
+                }
+
+                scene.style.backgroundImage = `url('${IMAGES[2]}')`;
+                currentSlide = 2;
+                isThirdSlide = true;
+                dialogueText.textContent = "ты пришёл к Владу...";
+                dialogueArea.classList.remove('hidden');
+                thirdBtn.classList.remove('hidden');
+                thirdBtn.classList.add('visible');
+                thirdBtn.style.pointerEvents = 'auto';
+                setTimeout(() => {
+                    positionElement(2386, 1329, thirdBtn, 2);
+                }, 50);
+                console.log('✅ Переход на третий слайд');
+            }
+
+            function handleCode17() {
+                if (code17Played) return;
+                code17Played = true;
+                closeModal();
+                fingerIcon.classList.remove('visible');
+                fingerIcon.classList.add('hidden');
+                if (code17Audio && code17Loaded) {
+                    try {
+                        code17Audio.currentTime = 0;
+                        code17Audio.volume = 0.7;
+                        const playPromise = code17Audio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                console.log('🔊 Звук 17 запущен');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка воспроизведения звука 17:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка воспроизведения звука 17:', e);
+                    }
+                }
+
+                if (code17Audio) {
+                    code17Audio.addEventListener('ended', function onCode17End() {
+                        code17Audio.removeEventListener('ended', onCode17End);
+                        console.log('🔇 Звук 17 завершён, начинаем переход на 3 слайд с размытием');
+                        scene.classList.add('blurred');
+                        playBlurSound();
+                        setTimeout(() => {
+                            scene.classList.remove('blurred');
+                            stopBlurSound();
+                            goToThirdSlide();
+                        }, 800);
+                    });
+                } else {
+                    setTimeout(() => {
+                        scene.classList.add('blurred');
+                        playBlurSound();
+                        setTimeout(() => {
+                            scene.classList.remove('blurred');
+                            stopBlurSound();
+                            goToThirdSlide();
+                        }, 800);
+                    }, 3000);
+                }
+            }
+
+            function handleCodeSubmit() {
+                const code = codeInput.value.trim();
+                if (!code) {
+                    errorMsg.textContent = 'Введите код';
+                    return;
+                }
+                if (code === '17') {
+                    handleCode17();
+                } else if (code === '67') {
+                    closeModal();
+                    if (code67Audio && code67Loaded) {
+                        try {
+                            code67Audio.currentTime = 0;
+                            code67Audio.volume = 0.5;
+                            const playPromise = code67Audio.play();
+                            if (playPromise !== undefined) {
+                                playPromise.then(() => {
+                                    console.log('🔊 Музыка 67 запущена');
+                                }).catch(e => {
+                                    console.warn('🔇 Ошибка воспроизведения музыки 67:', e);
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('🔇 Ошибка воспроизведения музыки 67:', e);
+                        }
+                    }
+                    gameoverOverlay.classList.add('active');
+                    isGameOver = true;
+                    stopAngerTimer();
+                    console.log('💀 GAME OVER (код 67)');
+                } else {
+                    closeModal();
+                    if (codeFailAudio && codeFailLoaded) {
+                        try {
+                            codeFailAudio.currentTime = 0;
+                            codeFailAudio.volume = 0.8;
+                            const playPromise = codeFailAudio.play();
+                            if (playPromise !== undefined) {
+                                playPromise.then(() => {
+                                    console.log('🔊 Голос 011 запущен');
+                                }).catch(e => {
+                                    console.warn('🔇 Ошибка воспроизведения голоса 011:', e);
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('🔇 Ошибка воспроизведения голоса 011:', e);
+                        }
+                    }
+                    gameoverOverlay.classList.add('active');
+                    isGameOver = true;
+                    stopAngerTimer();
+                    console.log('💀 GAME OVER (неправильный код)');
+                }
+            }
+
+            function closeModal() {
+                modalOverlay.classList.remove('active');
+                codeInput.value = '';
+                errorMsg.textContent = '';
+            }
+
+            function handleFingerTap() {
+                if (!isSecondSlide) return;
+                if (isGameOver) return;
+                if (modalOverlay.classList.contains('active')) return;
+                console.log('👆 Нажата иконка на втором слайде');
+                modalOverlay.classList.add('active');
+                codeInput.value = '';
+                errorMsg.textContent = '';
+                codeInput.focus();
+            }
+
+            function playBlurSound() {
+                if (!blurAudio || !blurLoaded) {
+                    console.warn('🔇 Звук ходьбы не готов');
+                    return;
+                }
+                if (!audioActivated) activateAudio();
+                try {
+                    blurAudio.currentTime = 0;
+                    blurAudio.volume = 0.5;
+                    const playPromise = blurAudio.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            isBlurPlaying = true;
+                            console.log('🔊 Звук ходьбы запущен');
+                        }).catch(e => {
+                            console.warn('🔇 Ошибка воспроизведения звука ходьбы:', e);
+                        });
+                    }
+                } catch (e) {
+                    console.warn('🔇 Ошибка воспроизведения звука ходьбы:', e);
+                }
+            }
+
+            function stopBlurSound() {
+                if (blurAudio && isBlurPlaying) {
+                    try {
+                        blurAudio.pause();
+                        blurAudio.currentTime = 0;
+                        isBlurPlaying = false;
+                        console.log('🔇 Звук ходьбы остановлен');
+                    } catch (e) {
+                        console.warn('⚠️ Ошибка остановки звука ходьбы:', e);
+                    }
+                }
+            }
+
+            function handleNext() {
+                if (isGameOver) return;
+                if (isSecondSlide) return;
+                console.log('🚪 Переход на второй слайд...');
+                playBlurSound();
+                scene.classList.add('blurred');
+                nextBtn.classList.remove('visible');
+                nextBtn.classList.add('hidden');
+                nextBtn.style.pointerEvents = 'none';
+                dialogueArea.classList.add('hidden');
+                setTimeout(() => {
+                    scene.style.backgroundImage = `url('${IMAGES[1]}')`;
+                    currentSlide = 1;
+                    scene.classList.remove('blurred');
+                    stopBlurSound();
+                    fingerIcon.classList.add('visible');
+                    fingerIcon.style.pointerEvents = 'auto';
+                    setTimeout(() => {
+                        positionElement(1447, 1007, fingerIcon, 1);
+                    }, 50);
+                    isSecondSlide = true;
+                    debugCoord.style.opacity = '1';
+                    debugCoord.style.visibility = 'visible';
+                    updateCoords(0, 0);
+                    console.log('✅ Переход на второй слайд завершён');
+                }, 1200);
+                debugCoord.textContent = '➜ ПЕРЕХОД';
+                setTimeout(() => updateCoords(0, 0), 1500);
+            }
+
+            function startChaseSequence() {
+                if (isChaseActive || isChaseFinished) return;
+                isChaseActive = true;
+                console.log('🏃 Начинаем погоню!');
+                if (ambient3Audio && isAmbient3Playing) {
+                    try {
+                        ambient3Audio.pause();
+                        ambient3Audio.currentTime = 0;
+                        isAmbient3Playing = false;
+                        console.log('🔇 Фоновый звук 3-4 слайдов остановлен');
+                    } catch (e) {}
+                }
+                dialogueArea.classList.add('hidden');
+                scene.classList.add('chase');
+                chaseText.classList.add('visible');
+
+                if (voice008Audio && voice008Loaded) {
+                    try {
+                        voice008Audio.currentTime = 0;
+                        voice008Audio.volume = 0.8;
+                        const playPromise = voice008Audio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                console.log('🔊 Голос 008 запущен (погоня)');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка воспроизведения голоса 008:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка воспроизведения голоса 008:', e);
+                    }
+                }
+
+                if (voice008Audio) {
+                    voice008Audio.addEventListener('ended', function onVoice008End() {
+                        voice008Audio.removeEventListener('ended', onVoice008End);
+                        console.log('🔇 Голос 008 завершён, запускаем голос 012');
+                        if (voice012Audio && voice012Loaded) {
+                            try {
+                                voice012Audio.currentTime = 0;
+                                voice012Audio.volume = 0.8;
+                                const playPromise = voice012Audio.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        console.log('🔊 Голос 012 запущен (погоня)');
+                                    }).catch(e => {
+                                        console.warn('🔇 Ошибка воспроизведения голоса 012:', e);
+                                    });
+                                }
+                            } catch (e) {
+                                console.warn('🔇 Ошибка воспроизведения голоса 012:', e);
+                            }
+                        }
+                        if (voice012Audio) {
+                            voice012Audio.addEventListener('ended', function onVoice012End() {
+                                voice012Audio.removeEventListener('ended', onVoice012End);
+                                console.log('🔇 Голос 012 завершён, завершаем погоню');
+                                scene.classList.remove('chase');
+                                chaseText.classList.remove('visible');
+                                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                                currentSlide = 4;
+                                isChaseFinished = true;
+                                isChaseActive = false;
+                                dialogueText.textContent = "4 этаж";
+                                dialogueArea.classList.remove('hidden');
+                                console.log('✅ Переход на слайд "4 этаж"');
+
+                                if (voice007Audio && voice007Loaded) {
+                                    try {
+                                        voice007Audio.currentTime = 0;
+                                        voice007Audio.volume = 0.8;
+                                        const playPromise = voice007Audio.play();
+                                        if (playPromise !== undefined) {
+                                            playPromise.then(() => {
+                                                console.log('🔊 Голос 007 запущен на 4 этаже');
+                                            }).catch(e => {
+                                                console.warn('🔇 Ошибка воспроизведения голоса 007:', e);
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.warn('🔇 Ошибка воспроизведения голоса 007:', e);
+                                    }
+                                }
+                                dialogueText.textContent = "чтобы сбежать с подъезда Влада, мне нужно выполнить всего его задания и после этого может быть я вернусь домой живым";
+                                dialogueArea.classList.remove('hidden');
+                                if (voice007Audio) {
+                                    voice007Audio.addEventListener('ended', function onVoice007End() {
+                                        voice007Audio.removeEventListener('ended', onVoice007End);
+                                        console.log('🔇 Голос 007 завершён, диалог скрывается насовсем');
+                                        dialogueArea.classList.add('hidden');
+                                        dialogueText.textContent = '';
+                                        startAngerTimer();
+                                        updateFloorDisplay();
+                                    });
+                                } else {
+                                    setTimeout(() => {
+                                        dialogueArea.classList.add('hidden');
+                                        dialogueText.textContent = '';
+                                        startAngerTimer();
+                                        updateFloorDisplay();
+                                    }, 3000);
+                                }
+                            });
+                        } else {
+                            setTimeout(() => {
+                                scene.classList.remove('chase');
+                                chaseText.classList.remove('visible');
+                                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                                currentSlide = 4;
+                                isChaseFinished = true;
+                                isChaseActive = false;
+                                dialogueText.textContent = "4 этаж";
+                                dialogueArea.classList.remove('hidden');
+                                if (voice007Audio && voice007Loaded) {
+                                    voice007Audio.play().catch(() => {});
+                                }
+                                dialogueText.textContent = "чтобы сбежать с подъезда Влада, мне нужно выполнить всего его задания и после этого может быть я вернусь домой живым";
+                                setTimeout(() => {
+                                    dialogueArea.classList.add('hidden');
+                                    dialogueText.textContent = '';
+                                    startAngerTimer();
+                                    updateFloorDisplay();
+                                }, 3000);
+                            }, 500);
+                        }
+                    });
+                } else {
+                    setTimeout(() => {
+                        if (voice012Audio && voice012Loaded) {
+                            voice012Audio.play().catch(() => {});
+                        }
+                        setTimeout(() => {
+                            scene.classList.remove('chase');
+                            chaseText.classList.remove('visible');
+                            scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                            currentSlide = 4;
+                            isChaseFinished = true;
+                            isChaseActive = false;
+                            dialogueText.textContent = "4 этаж";
+                            dialogueArea.classList.remove('hidden');
+                            if (voice007Audio && voice007Loaded) {
+                                voice007Audio.play().catch(() => {});
+                            }
+                            dialogueText.textContent = "чтобы сбежать с подъезда Влада, мне нужно выполнить всего его задания и после этого может быть я вернусь домой живым";
+                            setTimeout(() => {
+                                dialogueArea.classList.add('hidden');
+                                dialogueText.textContent = '';
+                                startAngerTimer();
+                                updateFloorDisplay();
+                            }, 3000);
+                        }, 3000);
+                    }, 3000);
+                }
+            }
+
+            function handleThirdBtn() {
+                if (!isThirdSlide) return;
+                if (isGameOver) return;
+                if (thirdSlideLock) return;
+                thirdSlideLock = true;
+                console.log('👆 Нажата кнопка на третьем слайде');
+                thirdBtn.classList.remove('visible');
+                thirdBtn.classList.add('hidden');
+                thirdBtn.style.pointerEvents = 'none';
+
+                if (knockAudio && knockLoaded) {
+                    try {
+                        knockAudio.currentTime = 0;
+                        knockAudio.volume = 0.8;
+                        const playPromise = knockAudio.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                console.log('🔊 Стук в дверь запущен');
+                            }).catch(e => {
+                                console.warn('🔇 Ошибка воспроизведения стука:', e);
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('🔇 Ошибка воспроизведения стука:', e);
+                    }
+                }
+
+                if (knockAudio) {
+                    knockAudio.addEventListener('ended', function onKnockEnd() {
+                        knockAudio.removeEventListener('ended', onKnockEnd);
+                        console.log('🔇 Стук завершён, затемнение...');
+                        scene.classList.add('blurred');
+                        if (afterKnockAudio && afterKnockLoaded) {
+                            try {
+                                afterKnockAudio.currentTime = 0;
+                                afterKnockAudio.volume = 0.6;
+                                const playPromise = afterKnockAudio.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        console.log('🔊 Звук после стука запущен');
+                                    }).catch(e => {
+                                        console.warn('🔇 Ошибка воспроизведения звука после стука:', e);
+                                    });
+                                }
+                            } catch (e) {
+                                console.warn('🔇 Ошибка воспроизведения звука после стука:', e);
+                            }
+                        }
+                        if (afterKnockAudio) {
+                            afterKnockAudio.addEventListener('ended', function onAfterKnockEnd() {
+                                afterKnockAudio.removeEventListener('ended', onAfterKnockEnd);
+                                console.log('🔇 Звук после стука завершён');
+                                scene.classList.remove('blurred');
+                                scene.style.backgroundImage = `url('${IMAGES[3]}')`;
+                                currentSlide = 3;
+                                isFourthSlide = true;
+                                dialogueText.textContent = "Влад: ты принес мой Напас??\nИГРОК: прости я его потерял.\nВЛАД: Если ты не найдёшь мой бруско, я съём тебя!!!";
+                                dialogueArea.classList.remove('hidden');
+                                if (slide4Audio && slide4Loaded) {
+                                    try {
+                                        slide4Audio.currentTime = 0;
+                                        slide4Audio.volume = 0.7;
+                                        const playPromise = slide4Audio.play();
+                                        if (playPromise !== undefined) {
+                                            playPromise.then(() => {
+                                                console.log('🔊 Озвучка 4 слайда запущена');
+                                                isSlide4Playing = true;
+                                            }).catch(e => {
+                                                console.warn('🔇 Ошибка воспроизведения озвучки 4:', e);
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.warn('🔇 Ошибка воспроизведения озвучки 4:', e);
+                                    }
+                                }
+                                if (slide4Audio) {
+                                    slide4Audio.addEventListener('ended', function onSlide4End() {
+                                        slide4Audio.removeEventListener('ended', onSlide4End);
+                                        isSlide4Playing = false;
+                                        console.log('🔇 Озвучка 4 завершена. Запускаем погоню.');
+                                        startChaseSequence();
+                                    });
+                                } else {
+                                    setTimeout(() => {
+                                        startChaseSequence();
+                                    }, 3000);
+                                }
+                                console.log('✅ Переход на четвёртый слайд');
+                            });
+                        } else {
+                            setTimeout(() => {
+                                scene.classList.remove('blurred');
+                                scene.style.backgroundImage = `url('${IMAGES[3]}')`;
+                                currentSlide = 3;
+                                isFourthSlide = true;
+                                dialogueText.textContent = "Влад: ты принес мой Напас??\nИГРОК: прости я его потерял.\nВЛАД: Если ты не найдёшь мой бруско, я съём тебя!!!";
+                                dialogueArea.classList.remove('hidden');
+                                if (slide4Audio && slide4Loaded) {
+                                    slide4Audio.play().catch(() => {});
+                                }
+                                setTimeout(() => {
+                                    startChaseSequence();
+                                }, 5000);
+                            }, 3000);
+                        }
+                    });
+                } else {
+                    setTimeout(() => {
+                        scene.classList.add('blurred');
+                        setTimeout(() => {
+                            scene.classList.remove('blurred');
+                            scene.style.backgroundImage = `url('${IMAGES[3]}')`;
+                            currentSlide = 3;
+                            isFourthSlide = true;
+                            dialogueText.textContent = "Влад: ты принес мой Напас??\nИГРОК: прости я его потерял.\nВЛАД: Если ты не найдёшь мой бруско, я съём тебя!!!";
+                            dialogueArea.classList.remove('hidden');
+                            if (slide4Audio && slide4Loaded) {
+                                slide4Audio.play().catch(() => {});
+                            }
+                            setTimeout(() => {
+                                startChaseSequence();
+                            }, 5000);
+                        }, 800);
+                    }, 1000);
+                }
+            }
+
+            function updateCoords(x, y) {
+                debugCoord.textContent = `📍 X: ${x}  Y: ${y}`;
+                debugCoord.classList.remove('highlight');
+                void debugCoord.offsetWidth;
+                debugCoord.classList.add('highlight');
+                clearTimeout(window.coordHighlightTimeout);
+                window.coordHighlightTimeout = setTimeout(() => {
+                    debugCoord.classList.remove('highlight');
+                }, 1500);
+            }
+
+            function handleSceneClick(e) {
+                if (isGameOver) return;
+                const rect = scene.getBoundingClientRect();
+                let x, y;
+                if (e.touches) {
+                    const touch = e.touches[0] || e.changedTouches[0];
+                    if (!touch) return;
+                    x = Math.round(touch.clientX - rect.left);
+                    y = Math.round(touch.clientY - rect.top);
+                    e.preventDefault();
+                } else {
+                    x = Math.round(e.clientX - rect.left);
+                    y = Math.round(e.clientY - rect.top);
+                }
+                updateCoords(x, y);
+                if (!audioActivated) {
+                    activateAudio();
+                }
+                if (e.cancelable) e.preventDefault();
+            }
+
+            // --- ЗАПУСК ИГРЫ ---
+            function startGame() {
+                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                currentSlide = 4;
+                loadingScreen.classList.add('hidden');
+                console.log('🚪 Все ресурсы загружены. Игра начата.');
+
+                updateFloorDisplay();
+                updateAngerMeter();
+
+                dialogueText.textContent = "все начиналось возле старой 4 этажки Влада\nя хотел принести Владу бруско, но я его потерял\nя боялся сказать это Владу, потому что я знаю что бывает когда он злится";
+
+                nextBtn.classList.remove('visible');
+                nextBtn.classList.add('hidden');
+                nextBtn.style.pointerEvents = 'none';
+
+                document.addEventListener('touchstart', activateAudio, { once: true });
+                document.addEventListener('click', activateAudio, { once: true });
+
+                setTimeout(() => {
+                    if (ambientLoaded && !isAmbientPlaying) {
+                        activateAudio();
+                    }
+                }, 500);
+
+                setTimeout(() => {
+                    if (!voiceEnded) {
+                        console.warn('⚠️ Таймаут: принудительно показываем кнопку');
+                        onVoiceEnded();
+                    }
+                }, 15000);
+
+                console.log('✅ Навигация активна, злость Влада запустится после погони.');
+            }
+
+            // --- АДМИН-СКИП ---
+            function adminSkipToFourthFloor() {
+                console.log('⏭ Админ-скип: переход на 4 этаж');
+                currentSlide = 4;
+                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                nextBtn.classList.remove('visible');
+                nextBtn.classList.add('hidden');
+                nextBtn.style.pointerEvents = 'none';
+                fingerIcon.classList.remove('visible');
+                fingerIcon.classList.add('hidden');
+                fingerIcon.style.pointerEvents = 'none';
+                thirdBtn.classList.remove('visible');
+                thirdBtn.classList.add('hidden');
+                thirdBtn.style.pointerEvents = 'none';
+                dialogueArea.classList.add('hidden');
+                dialogueText.textContent = '';
+                scene.classList.remove('chase');
+                chaseText.classList.remove('visible');
+                isChaseActive = false;
+                isChaseFinished = true;
+                code17Played = true;
+                thirdSlideLock = true;
+                isSecondSlide = true;
+                isThirdSlide = true;
+                isFourthSlide = true;
+                isGameOver = false;
+                gameoverOverlay.classList.remove('active');
+                gameOverTriggered = false;
+                updateFloorDisplay();
+                closeModal();
+                angerLevel = 15;
+                updateAngerMeter();
+                stopAngerTimer();
+                startAngerTimer();
+                console.log('✅ Админ-скип выполнен, злость сброшена.');
+            }
+
+            // --- ЧАСЫ ---
+            function updateClock() {
+                const now = new Date();
+                const h = String(now.getHours()).padStart(2, '0');
+                const m = String(now.getMinutes()).padStart(2, '0');
+                clockText.textContent = `${h}:${m}`;
+            }
+            updateClock();
+            setInterval(updateClock, 30000);
+
+            // --- СОБЫТИЯ ---
+            window.addEventListener('resize', repositionAll);
+
+            scene.addEventListener('click', handleSceneClick);
+            scene.addEventListener('touchstart', handleSceneClick, { passive: false });
+            scene.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            // События сюжетных кнопок
+            nextBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                console.log('Кнопка "Идти" нажата');
+                handleNext();
+            });
+            nextBtn.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                console.log('Кнопка "Идти" нажата (touch)');
+                handleNext();
+            }, { passive: false });
+
+            fingerIcon.addEventListener('click', function(e) {
+                e.stopPropagation();
+                handleFingerTap();
+            });
+            fingerIcon.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                handleFingerTap();
+            }, { passive: false });
+
+            thirdBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                handleThirdBtn();
+            });
+            thirdBtn.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                handleThirdBtn();
+            }, { passive: false });
+
+            adminSkip.addEventListener('click', function(e) {
+                e.stopPropagation();
+                adminSkipToFourthFloor();
+            });
+            adminSkip.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                adminSkipToFourthFloor();
+            }, { passive: false });
+
+            modalCancel.addEventListener('click', closeModal);
+            modalConfirm.addEventListener('click', handleCodeSubmit);
+            modalOverlay.addEventListener('click', function(e) {
+                if (e.target === modalOverlay) {
+                    closeModal();
+                }
+            });
+            codeInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCodeSubmit();
+                }
+                if (e.key === 'Escape') {
+                    closeModal();
+                }
+                if (!/^[0-9]$/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Tab') {
+                    e.preventDefault();
+                }
+            });
+
+            // --- ЗАПУСК ПРЕДЗАГРУЗКИ ---
+            console.log('⏳ Начинаем предзагрузку ресурсов...');
+            preloadImages();
+            preloadIcons();
+
+            preloadAudio(AUDIO_AMBIENT, 'фоновый звук природы', (audio, loaded) => {
+                ambientAudio = audio;
+                ambientLoaded = loaded;
+                if (ambientAudio) {
+                    ambientAudio.loop = true;
+                    ambientAudio.volume = 0.3;
+                }
+            });
+
+            preloadAudio(AUDIO_BLUR, 'звук ходьбы', (audio, loaded) => {
+                blurAudio = audio;
+                blurLoaded = loaded;
+                if (blurAudio) {
+                    blurAudio.volume = 0.5;
+                }
+            });
+
+            preloadAudio(AUDIO_VOICE, 'голосовое сообщение', (audio, loaded) => {
+                voiceAudio = audio;
+                voiceLoaded = loaded;
+                if (voiceAudio) {
+                    voiceAudio.volume = 0.8;
+                    voiceAudio.addEventListener('ended', onVoiceEnded);
+                }
+            });
+
+            preloadAudio(AUDIO_CODE_FAIL, 'голос 011', (audio, loaded) => {
+                codeFailAudio = audio;
+                codeFailLoaded = loaded;
+                if (codeFailAudio) {
+                    codeFailAudio.volume = 0.8;
+                }
+            });
+
+            preloadAudio(AUDIO_CODE_67, 'музыка 67', (audio, loaded) => {
+                code67Audio = audio;
+                code67Loaded = loaded;
+                if (code67Audio) {
+                    code67Audio.volume = 0.5;
+                }
+            });
+
+            preloadAudio(AUDIO_CODE_17, 'звук 17', (audio, loaded) => {
+                code17Audio = audio;
+                code17Loaded = loaded;
+                if (code17Audio) {
+                    code17Audio.volume = 0.7;
+                }
+            });
+
+            preloadAudio(AUDIO_AMBIENT_3, 'фоновый звук 3-4 слайдов', (audio, loaded) => {
+                ambient3Audio = audio;
+                ambient3Loaded = loaded;
+                if (ambient3Audio) {
+                    ambient3Audio.loop = true;
+                    ambient3Audio.volume = 0.3;
+                }
+            });
+
+            preloadAudio(AUDIO_KNOCK, 'стук в дверь', (audio, loaded) => {
+                knockAudio = audio;
+                knockLoaded = loaded;
+                if (knockAudio) {
+                    knockAudio.volume = 0.8;
+                }
+            });
+
+            preloadAudio(AUDIO_AFTER_KNOCK, 'звук после стука', (audio, loaded) => {
+                afterKnockAudio = audio;
+                afterKnockLoaded = loaded;
+                if (afterKnockAudio) {
+                    afterKnockAudio.volume = 0.6;
+                }
+            });
+
+            preloadAudio(AUDIO_SLIDE4, 'озвучка 4 слайда', (audio, loaded) => {
+                slide4Audio = audio;
+                slide4Loaded = loaded;
+                if (slide4Audio) {
+                    slide4Audio.volume = 0.7;
+                }
+            });
+
+            preloadAudio(AUDIO_VOICE_008, 'голос 008 (погоня)', (audio, loaded) => {
+                voice008Audio = audio;
+                voice008Loaded = loaded;
+                if (voice008Audio) {
+                    voice008Audio.volume = 0.8;
+                }
+            });
+
+            preloadAudio(AUDIO_VOICE_012, 'голос 012 (погоня)', (audio, loaded) => {
+                voice012Audio = audio;
+                voice012Loaded = loaded;
+                if (voice012Audio) {
+                    voice012Audio.volume = 0.8;
+                }
+            });
+
+            preloadAudio(AUDIO_VOICE_007, 'голос 007 (4 этаж)', (audio, loaded) => {
+                voice007Audio = audio;
+                voice007Loaded = loaded;
+                if (voice007Audio) {
+                    voice007Audio.volume = 0.8;
+                }
+            });
+
+            console.log('✅ Отладка координат активна.');
+            console.log('🎯 Сюжетные кнопки работают.');
+            console.log('🚪 Навигация: кнопки ▲▼ в правом нижнем углу.');
+            console.log('📌 Перемещение: 4 этаж → 4 коридор → 3 этаж → 3 коридор → 2 этаж → 2 коридор → 1 этаж.');
+            console.log('😡 Злость Влада растёт каждую секунду. Выполняйте задания, чтобы снизить её.');
+            console.log('⏭ Админ-кнопка "Skip" для быстрого перехода на 4 этаж.');
+        })();
+    </script>
+</body>
+</html>
