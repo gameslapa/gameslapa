@@ -1,0 +1,2341 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Выживи у Влада (Исправленная версия)</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #080808;
+            font-family: "Courier New", monospace;
+            touch-action: manipulation;
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        .game {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            background: #080808;
+        }
+
+        .scene {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            background: #090909 center / cover no-repeat;
+            transition: filter 0.8s ease, background-image 0.5s ease;
+            touch-action: none;
+        }
+
+        .scene.blurred {
+            filter: blur(15px) brightness(0.55);
+        }
+
+        .scene.shake {
+            animation: shake 0.15s infinite alternate;
+        }
+
+        .scene.chase {
+            animation: chase 0.13s infinite alternate;
+            filter: blur(6px) brightness(0.48);
+        }
+
+        @keyframes shake {
+            from { transform: translate(-5px, -3px) rotate(-0.7deg); }
+            to { transform: translate(5px, 3px) rotate(0.7deg); }
+        }
+
+        @keyframes chase {
+            from { transform: translate(-10px, -6px) rotate(-1.5deg); }
+            to { transform: translate(10px, 7px) rotate(1.5deg); }
+        }
+
+        .loading,
+        .start-gate,
+        .day-screen,
+        .screamer,
+        .gameover {
+            position: absolute;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: #080808;
+            color: #d6a82f;
+            text-align: center;
+        }
+
+        .loading.hidden,
+        .start-gate.hidden,
+        .day-screen,
+        .screamer,
+        .gameover {
+            display: none;
+        }
+
+        .day-screen.active,
+        .screamer.active,
+        .gameover.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            margin-bottom: 18px;
+            border: 3px solid #282828;
+            border-top-color: #c89618;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-progress {
+            margin-top: 10px;
+            color: #71613b;
+            font-size: 0.75rem;
+        }
+
+        .start-gate {
+            z-index: 990;
+            cursor: pointer;
+        }
+
+        .start-icon {
+            display: grid;
+            place-items: center;
+            width: 78px;
+            height: 78px;
+            margin-bottom: 15px;
+            border: 2px solid #b8860b;
+            border-radius: 50%;
+            background: rgba(184, 134, 11, 0.13);
+            box-shadow: 0 0 35px rgba(184, 134, 11, 0.3);
+            font-size: 2rem;
+            animation: pulse 0.7s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: scale(0.94); }
+            to { transform: scale(1.06); }
+        }
+
+        .start-gate h2 {
+            margin-bottom: 10px;
+            letter-spacing: 3px;
+        }
+
+        .start-gate p {
+            max-width: 480px;
+            color: #938566;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .clock,
+        .floor-name,
+        .round-name {
+            position: absolute;
+            z-index: 55;
+            padding: 5px 12px;
+            border: 1px solid rgba(184, 134, 11, 0.35);
+            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.68);
+            color: #ffd966;
+            pointer-events: none;
+        }
+
+        .clock {
+            top: max(14px, env(safe-area-inset-top));
+            right: max(14px, env(safe-area-inset-right));
+        }
+
+        .floor-name {
+            right: 18px;
+            bottom: 160px;
+        }
+
+        .round-name {
+            top: 58px;
+            right: 14px;
+            color: #bbb29f;
+            font-size: 0.7rem;
+        }
+
+        .hud {
+            position: absolute;
+            top: max(14px, env(safe-area-inset-top));
+            left: 50%;
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .meter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 11px;
+            border: 1px solid #e54444;
+            border-radius: 24px;
+            background: rgba(0, 0, 0, 0.72);
+        }
+
+        .meter.silence {
+            display: none;
+            border-color: #9a82ff;
+        }
+
+        .meter.silence.visible {
+            display: flex;
+        }
+
+        .meter-bar {
+            width: 112px;
+            height: 8px;
+            overflow: hidden;
+            border-radius: 10px;
+            background: #2a2020;
+        }
+
+        .meter-fill {
+            width: 15%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #ff7545, #ed0000);
+            transition: width 0.25s;
+        }
+
+        #silenceFill {
+            width: 0;
+            background: linear-gradient(90deg, #727dff, #bd4cff);
+        }
+
+        .meter-value {
+            min-width: 38px;
+            color: #ff8d8d;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .silence .meter-value {
+            color: #c9bfff;
+        }
+
+        .ui-hidden {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+
+        .sound-btn,
+        .nav-btn {
+            position: absolute;
+            z-index: 80;
+            display: grid;
+            place-items: center;
+            border: 2px solid #b8860b;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.72);
+            color: #ffd966;
+            cursor: pointer;
+        }
+
+        .sound-btn {
+            top: max(14px, env(safe-area-inset-top));
+            left: max(14px, env(safe-area-inset-left));
+            width: 42px;
+            height: 42px;
+            font-size: 1.2rem;
+        }
+
+        .nav-btn {
+            right: 18px;
+            width: 56px;
+            height: 56px;
+            font-size: 1.6rem;
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        #navUp { bottom: 88px; }
+        #navDown { bottom: 18px; }
+
+        .story-btn,
+        .task-btn {
+            position: absolute;
+            z-index: 70;
+            display: grid;
+            place-items: center;
+            width: 58px;
+            height: 58px;
+            padding: 0;
+            border: 3px solid #b8860b;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.76);
+            box-shadow: 0 0 28px rgba(184, 134, 11, 0.42);
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transform: translate(-50%, -50%) scale(0.7);
+            pointer-events: none;
+            transition: opacity 0.25s, transform 0.25s, visibility 0.25s;
+            touch-action: manipulation;
+        }
+
+        .task-btn {
+            width: 54px;
+            height: 54px;
+            border: 2px solid #ffd700;
+            background: rgba(255, 215, 0, 0.18);
+            transform: translate(-50%, -50%) scale(0.7);
+        }
+
+        .story-btn.visible,
+        .task-btn.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+            pointer-events: auto;
+        }
+
+        .story-btn img,
+        .task-btn img {
+            width: 60%;
+            height: 60%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        .task-btn.cooldown {
+            opacity: 0.45;
+            filter: grayscale(0.8);
+        }
+
+        .task-label {
+            position: absolute;
+            z-index: 72;
+            display: none;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #ffe274;
+            font-size: 0.62rem;
+            transform: translate(-50%, 31px);
+            pointer-events: none;
+        }
+
+        .task-label.visible {
+            display: block;
+        }
+
+        .dialogue {
+            position: relative;
+            z-index: 10;
+            flex-shrink: 0;
+            min-height: 45px;
+            padding: 6px 13px;
+            border-top: 1px solid #292929;
+            background: rgba(9, 9, 9, 0.94);
+            color: #e6dccb;
+            font-size: clamp(0.65rem, 1.45vw, 0.86rem);
+            line-height: 1.32;
+            white-space: pre-line;
+            transition: 0.45s;
+        }
+
+        .dialogue::before {
+            content: "▸ ";
+            color: #b8860b;
+        }
+
+        .dialogue.hidden {
+            height: 0;
+            min-height: 0;
+            padding: 0 13px;
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(15px);
+        }
+
+        .coords {
+            position: absolute;
+            bottom: 9px;
+            left: 9px;
+            z-index: 65;
+            padding: 5px 11px;
+            border-left: 3px solid #00ffc8;
+            border-radius: 14px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #00ffc8;
+            font-size: 0.68rem;
+            pointer-events: none;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 600;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.82);
+            backdrop-filter: blur(8px);
+        }
+
+        .overlay.active {
+            display: flex;
+        }
+
+        .box {
+            position: relative;
+            width: min(440px, 100%);
+            padding: 27px 20px 20px;
+            border: 2px solid #b8860b;
+            border-radius: 23px;
+            background: linear-gradient(145deg, #292929, #141414);
+            box-shadow: 0 0 55px rgba(184, 134, 11, 0.2);
+            text-align: center;
+        }
+
+        .box h2 {
+            margin-bottom: 13px;
+            color: #ffd966;
+            letter-spacing: 2px;
+        }
+
+        .description {
+            margin-bottom: 13px;
+            color: #aaa;
+            font-size: 0.82rem;
+            line-height: 1.4;
+        }
+
+        .close {
+            position: absolute;
+            top: 7px;
+            right: 12px;
+            border: 0;
+            background: transparent;
+            color: #aaa;
+            font-size: 1.6rem;
+            cursor: pointer;
+        }
+
+        .input {
+            width: 100%;
+            margin-bottom: 12px;
+            padding: 12px;
+            border: 1px solid #555;
+            border-radius: 12px;
+            outline: 0;
+            background: #080808;
+            color: #fff;
+            font-size: 1.7rem;
+            text-align: center;
+            user-select: text;
+        }
+
+        .action {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #b8860b;
+            border-radius: 22px;
+            background: #b8860b;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .error {
+            min-height: 20px;
+            margin: 8px 0;
+            color: #ff6868;
+            font-size: 0.78rem;
+        }
+
+        .game-area {
+            position: relative;
+            min-height: 220px;
+            overflow: hidden;
+            border: 1px solid #333;
+            border-radius: 15px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .progress {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            width: 72%;
+            height: 9px;
+            overflow: hidden;
+            border-radius: 10px;
+            background: #333;
+            transform: translateX(-50%);
+        }
+
+        .progress-fill {
+            width: 0;
+            height: 100%;
+            background: linear-gradient(90deg, #42a5f5, #45d178);
+        }
+
+        .hint {
+            position: absolute;
+            top: 7px;
+            left: 0;
+            width: 100%;
+            color: #ddd;
+            font-size: 0.7rem;
+            text-align: center;
+            text-shadow: 0 1px 3px #000;
+            pointer-events: none;
+        }
+
+        .flower {
+            position: absolute;
+            top: 50%;
+            left: 20%;
+            display: grid;
+            place-items: center;
+            width: 105px;
+            height: 130px;
+            border-radius: 20px;
+            transform: translate(-50%, -50%);
+        }
+
+        .flower.active {
+            background: rgba(60, 255, 110, 0.13);
+            box-shadow: 0 0 25px rgba(60, 255, 110, 0.3);
+        }
+
+        .flower img {
+            width: 90px;
+            pointer-events: none;
+        }
+
+        .glass {
+            position: absolute;
+            top: 50%;
+            left: 78%;
+            z-index: 4;
+            width: 72px;
+            height: 90px;
+            cursor: grab;
+            transform: translate(-50%, -50%);
+            touch-action: none;
+        }
+
+        .glass img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        .toilet {
+            position: absolute;
+            top: 48%;
+            left: 50%;
+            width: 120px;
+            height: 120px;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+        }
+
+        .toilet img {
+            position: absolute;
+            inset: 10px;
+            z-index: 2;
+            width: 100px;
+            pointer-events: none;
+        }
+
+        .pee {
+            position: absolute;
+            right: 20px;
+            bottom: 22px;
+            left: 25px;
+            z-index: 3;
+            height: 0;
+            border-radius: 50%;
+            background: linear-gradient(#ffe740e0, #c99800eb);
+            mix-blend-mode: multiply;
+            pointer-events: none;
+        }
+
+        .broom-floor {
+            position: absolute;
+            inset: 0;
+            background: url("https://img.magnific.com/free-photo/weathered-textured-concrete-wall_23-2148210303.jpg?semt=ais_hybrid&w=740&q=80") center / cover;
+            touch-action: none;
+        }
+
+        .dirt {
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 25% 30%, rgba(25, 16, 7, 0.82), transparent 25%),
+                radial-gradient(circle at 72% 65%, rgba(20, 12, 5, 0.8), transparent 29%),
+                radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.58), transparent 35%);
+        }
+
+        .broom {
+            position: absolute;
+            top: 60%;
+            left: 78%;
+            z-index: 4;
+            width: 82px;
+            height: 82px;
+            cursor: grab;
+            transform: translate(-50%, -50%);
+            touch-action: none;
+        }
+
+        .broom img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 5px 5px #000);
+            pointer-events: none;
+        }
+
+        .math-status {
+            display: flex;
+            justify-content: space-between;
+            gap: 5px;
+            color: #bbb;
+            font-size: 0.72rem;
+        }
+
+        .math-problem {
+            margin: 17px 0;
+            color: #fff;
+            font-size: clamp(2rem, 9vw, 3.5rem);
+            font-weight: bold;
+        }
+
+        .paper {
+            position: relative;
+            width: min(620px, 94vw);
+            height: min(760px, 88vh);
+            padding: clamp(65px, 11vh, 100px) clamp(48px, 10vw, 90px);
+            overflow: auto;
+            background: url("https://png.pngtree.com/png-vector/20240628/ourmid/pngtree-old-clean-paper-note-png-image_12725577.png") center / 100% 100% no-repeat;
+            filter: drop-shadow(0 15px 30px #000);
+        }
+
+        .paper p {
+            color: #392e21;
+            font-family: Georgia, serif;
+            font-size: clamp(0.72rem, 2.2vw, 1.04rem);
+            line-height: 1.43;
+            text-align: left;
+            white-space: pre-line;
+            user-select: text;
+        }
+
+        .wire-board {
+            position: relative;
+            height: 330px;
+            overflow: hidden;
+            border: 2px solid #555;
+            border-radius: 13px;
+            background: repeating-linear-gradient(90deg, #191919 0, #191919 20px, #202020 21px);
+            touch-action: none;
+        }
+
+        .wire-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .terminal {
+            position: absolute;
+            z-index: 4;
+            width: 42px;
+            height: 42px;
+            border: 4px solid #ddd;
+            border-radius: 50%;
+            box-shadow: 0 0 12px currentColor;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+        }
+
+        .terminal.left { left: 11%; }
+        .terminal.right { left: 89%; }
+
+        .wire-status {
+            margin-top: 10px;
+            color: #bbb;
+            font-size: 0.76rem;
+        }
+
+        .day-darkness {
+            position: absolute;
+            inset: 0;
+            z-index: 17;
+            background: rgba(0, 0, 18, 0.52);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.7s;
+            pointer-events: none;
+        }
+
+        .day-darkness.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .blackout {
+            position: absolute;
+            inset: 0;
+            z-index: 34;
+            background: rgba(0, 0, 0, 0.88);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .blackout.active {
+            opacity: 1;
+            visibility: visible;
+            animation: flicker 2s infinite;
+        }
+
+        @keyframes flicker {
+            0%, 8%, 12%, 45%, 49%, 100% { background: rgba(0, 0, 0, 0.88); }
+            9%, 11%, 47% { background: rgba(0, 0, 0, 0.58); }
+        }
+
+        .warning,
+        .danger-warning {
+            position: absolute;
+            top: 72px;
+            left: 50%;
+            z-index: 90;
+            display: none;
+            padding: 7px 13px;
+            border: 1px solid #ff3333;
+            border-radius: 20px;
+            background: rgba(40, 0, 0, 0.92);
+            color: #ff7373;
+            font-size: 0.72rem;
+            text-align: center;
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .warning.active,
+        .danger-warning.active {
+            display: block;
+        }
+
+        .danger-warning {
+            top: 105px;
+            border-color: #b287ff;
+            background: rgba(20, 0, 38, 0.94);
+            color: #ddc6ff;
+        }
+
+        .toast {
+            position: absolute;
+            top: 85px;
+            left: 50%;
+            z-index: 850;
+            display: none;
+            padding: 10px 17px;
+            border: 1px solid #55ee70;
+            border-radius: 20px;
+            background: rgba(2, 54, 16, 0.95);
+            color: #8dff9d;
+            white-space: nowrap;
+            transform: translateX(-50%);
+        }
+
+        .toast.show { display: block; }
+
+        .screamer {
+            z-index: 1100;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .screamer img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            animation: screamMove 0.08s infinite alternate;
+        }
+
+        .screamer.second {
+            animation: flash 0.07s 14 alternate;
+        }
+
+        @keyframes screamMove {
+            from { transform: scale(0.96) translate(-4px, 2px); }
+            to { transform: scale(1) translate(4px, -2px); }
+        }
+
+        @keyframes flash {
+            from { background: #000; }
+            to { background: #fff; }
+        }
+
+        .gameover {
+            z-index: 1110;
+            background: rgba(0, 0, 0, 0.97);
+        }
+
+        .gameover h1 {
+            color: #ff3333;
+            font-size: clamp(3rem, 13vw, 7rem);
+            letter-spacing: 6px;
+            text-shadow: 0 0 40px #ff0000;
+        }
+
+        .gameover p {
+            margin-top: 12px;
+            color: #aaa;
+        }
+
+        .day-screen {
+            z-index: 1200;
+            background: rgba(0, 0, 0, 0.98);
+        }
+
+        .day-screen h1 {
+            color: #e7dec8;
+            font-size: clamp(1.7rem, 7vw, 4.5rem);
+            font-weight: normal;
+            letter-spacing: 3px;
+        }
+
+        .day-screen p {
+            margin-top: 17px;
+            color: #817969;
+        }
+
+        @media (max-width: 600px) {
+            .story-btn { width: 49px; height: 49px; }
+            .task-btn { width: 46px; height: 46px; }
+            .nav-btn { right: 11px; width: 48px; height: 48px; }
+            #navUp { bottom: 70px; }
+            #navDown { bottom: 11px; }
+            .floor-name { right: 11px; bottom: 128px; font-size: 0.75rem; }
+            .meter-bar { width: 76px; }
+            .dialogue { min-height: 41px; padding: 5px 10px; font-size: clamp(0.61rem, 2.6vw, 0.76rem); }
+            .wire-board { height: 300px; }
+            .paper { padding: 70px 44px; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="game">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>ЗАГРУЗКА ПОДЪЕЗДА</div>
+            <div class="loading-progress" id="loadingProgress">0 / 40</div>
+        </div>
+
+        <div class="start-gate hidden" id="startGate">
+            <div class="start-icon">▶</div>
+            <h2>НАЖМИТЕ, ЧТОБЫ НАЧАТЬ</h2>
+            <p>Звук и первая сцена запустятся одновременно</p>
+        </div>
+
+        <main class="scene" id="scene">
+            <div class="day-darkness" id="dayDarkness"></div>
+            <div class="blackout" id="blackout"></div>
+            <div class="warning" id="powerWarning">⚡ ГЕНЕРАТОР ОТКЛЮЧЁН: 30</div>
+            <div class="danger-warning" id="dangerWarning">ТИХО! НЕ ДВИГАЙСЯ И НЕ ДЕЛАЙ ЗАДАНИЯ</div>
+
+            <button class="sound-btn" id="soundBtn">🔊</button>
+            <div class="clock" id="clock">00:00</div>
+            <div class="round-name" id="roundName">День 1</div>
+
+            <div class="hud ui-hidden" id="hud">
+                <div class="meter">
+                    <span>😡</span>
+                    <div class="meter-bar"><div class="meter-fill" id="angerFill"></div></div>
+                    <span class="meter-value" id="angerValue">15%</span>
+                </div>
+                <div class="meter silence" id="silenceMeter">
+                    <span>🔊</span>
+                    <div class="meter-bar"><div class="meter-fill" id="silenceFill"></div></div>
+                    <span class="meter-value" id="silenceValue">0%</span>
+                </div>
+            </div>
+
+            <div class="floor-name ui-hidden" id="floorName">Улица</div>
+            <button class="nav-btn ui-hidden" id="navUp">▲</button>
+            <button class="nav-btn ui-hidden" id="navDown">▼</button>
+
+            <button class="story-btn" id="nextBtn" aria-label="Идти">
+                <img src="https://cdn-icons-png.flaticon.com/512/3202/3202907.png" alt="Идти">
+            </button>
+            <button class="story-btn" id="fingerBtn" aria-label="Нажать">
+                <img src="https://cdn-icons-png.flaticon.com/512/96/96933.png" alt="Нажать">
+            </button>
+            <button class="story-btn" id="doorBtn" aria-label="Нажать">
+                <img src="https://cdn-icons-png.flaticon.com/512/96/96933.png" alt="Нажать">
+            </button>
+
+            <!-- Задания теперь позиционируются динамически через JS -->
+            <button class="task-btn" id="waterBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <button class="task-btn" id="toiletBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <button class="task-btn" id="broomBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <button class="task-btn" id="mathBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Задание">
+            </button>
+            <div class="task-label" id="mathLabel"></div>
+
+            <button class="story-btn" id="noteBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/96/96933.png" alt="Записка">
+            </button>
+            <button class="task-btn" id="generatorBtn">
+                <img src="https://cdn-icons-png.flaticon.com/512/1614/1614635.png" alt="Генератор">
+            </button>
+
+            <div class="coords" id="coords">📍 X: 0, Y: 0</div>
+        </main>
+
+        <div class="dialogue" id="dialogue">все начиналось возле старой 4 этажки Влада</div>
+
+        <div class="overlay" id="codeOverlay">
+            <div class="box" style="max-width: 320px;">
+                <h2>🔐 ВВЕДИТЕ КОД</h2>
+                <input class="input" id="codeInput" maxlength="4" inputmode="numeric" autocomplete="off">
+                <div class="error" id="codeError"></div>
+                <button class="action" id="codeSubmit">Вход</button>
+            </div>
+        </div>
+
+        <div class="overlay" id="taskOverlay">
+            <div class="box">
+                <button class="close" id="taskClose">×</button>
+                <h2 id="taskTitle">Задание</h2>
+                <div class="description" id="taskDescription"></div>
+                <div class="game-area" id="gameArea"></div>
+            </div>
+        </div>
+
+        <!-- Добавлена кнопка "X" (mathClose) для предотвращения софтлока -->
+        <div class="overlay" id="mathOverlay">
+            <div class="box">
+                <button class="close" id="mathClose">×</button>
+                <h2>🧠 ЗАДАНИЕ</h2>
+                <div class="description">3 примера, 10 секунд на каждый, 30 секунд на всё.</div>
+                <div class="math-status">
+                    <span id="mathCount">1 / 3</span>
+                    <span id="mathQuestionTime">10.0</span>
+                    <span id="mathTotalTime">30.0</span>
+                </div>
+                <div class="progress" style="position: relative; left: auto; bottom: auto; width: 100%; margin: 13px 0; transform: none;">
+                    <div class="progress-fill" id="mathTimeFill" style="width: 100%; background: linear-gradient(90deg, #ffd23f, #ff3333);"></div>
+                </div>
+                <div class="math-problem" id="mathProblem"></div>
+                <input class="input" id="mathInput" inputmode="numeric" autocomplete="off">
+                <button class="action" id="mathSubmit">ОТВЕТИТЬ</button>
+                <div class="error" id="mathError"></div>
+            </div>
+        </div>
+
+        <div class="overlay" id="noteOverlay">
+            <div class="paper">
+                <button class="close" id="noteClose" style="color: #3d2b20;">×</button>
+                <p>Привет.. меня зовут Ангелина. Я была здесь до тебя. Тоже стояла у двери, думала, что это просто старый подъезд. Влад улыбнулся и сказал: "Заходи". Я зашла. Сама.
+Три дня я пыталась выбраться. Почти получилось. Почти.
+Слушай, что я поняла за это время:
+1-й день — делай задания. Не зли его.
+2-й день — делай задания, но передвигайся тихо, услышишь, как он поет песню: Стой на месте!
+3-й день — беги. Без остановки. Не прячься.
+И главное: если Влад улыбнулся — ты уже опоздал. Беги сразу.</p>
+            </div>
+        </div>
+
+        <div class="overlay" id="wireOverlay">
+            <div class="box">
+                <button class="close" id="wireClose">×</button>
+                <h2>⚡ ГЕНЕРАТОР</h2>
+                <div class="description">Соедини провода одинакового цвета.</div>
+                <div class="wire-board" id="wireBoard">
+                    <svg class="wire-svg" id="wireSvg"></svg>
+                </div>
+                <div class="wire-status" id="wireStatus">Соединено: 0 / 4</div>
+            </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
+
+        <div class="screamer" id="screamer">
+            <img id="screamerImage" alt="Скример">
+        </div>
+
+        <div class="gameover" id="gameover">
+            <h1>GAME OVER</h1>
+            <p id="gameoverReason">Влад не прощает ошибок</p>
+        </div>
+
+        <div class="day-screen" id="dayScreen">
+            <h1 id="dayTitle">Вы прожили один день..</h1>
+            <p id="daySubtitle">Следующий день скоро начнётся</p>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            "use strict";
+
+            const $ = id => document.getElementById(id);
+            const BASE = "https://raw.githubusercontent.com/gameslapa/gameslapa/refs/heads/main/";
+
+            const scene = $("scene");
+            const loading = $("loading");
+            const loadingProgress = $("loadingProgress");
+            const startGate = $("startGate");
+            const dialogue = $("dialogue");
+            const hud = $("hud");
+            const silenceMeter = $("silenceMeter");
+            const angerFill = $("angerFill");
+            const angerValue = $("angerValue");
+            const silenceFill = $("silenceFill");
+            const silenceValue = $("silenceValue");
+            const floorName = $("floorName");
+            const navUp = $("navUp");
+            const navDown = $("navDown");
+            const nextBtn = $("nextBtn");
+            const fingerBtn = $("fingerBtn");
+            const doorBtn = $("doorBtn");
+            const waterBtn = $("waterBtn");
+            const toiletBtn = $("toiletBtn");
+            const broomBtn = $("broomBtn");
+            const mathBtn = $("mathBtn");
+            const mathLabel = $("mathLabel");
+            const noteBtn = $("noteBtn");
+            const generatorBtn = $("generatorBtn");
+            const codeOverlay = $("codeOverlay");
+            const taskOverlay = $("taskOverlay");
+            const mathOverlay = $("mathOverlay");
+            const noteOverlay = $("noteOverlay");
+            const wireOverlay = $("wireOverlay");
+            const gameArea = $("gameArea");
+            const blackout = $("blackout");
+            const dayDarkness = $("dayDarkness");
+            const powerWarning = $("powerWarning");
+            const dangerWarning = $("dangerWarning");
+            const screamer = $("screamer");
+            const screamerImage = $("screamerImage");
+            const gameover = $("gameover");
+            const dayScreen = $("dayScreen");
+
+            const IMAGES = [
+                "IMG_5432.jpeg", "IMG_5433.jpeg", "IMG_5441.jpeg", "IMG_5443.jpeg",
+                "IMG_5446.jpeg", "IMG_5525.jpeg", "IMG_5526.jpeg", "IMG_5515.jpeg",
+                "IMG_5523.jpeg", "IMG_5522.jpeg", "IMG_5524.jpeg"
+            ].map(file => BASE + file);
+
+            const FLOOR_NAMES = [
+                "Улица", "Подъезд", "Дверь Влада", "Квартира Влада", "4 этаж",
+                "4 этаж коридор", "3 этаж", "3 этаж коридор", "2 этаж",
+                "2 этаж коридор", "1 этаж"
+            ];
+
+            const SCREAMERS_1 = [
+                "IMG_5617.jpeg", "IMG_5616.jpeg", "IMG_5615.jpeg", "IMG_5614.jpeg", "IMG_5613.jpeg"
+            ].map(file => BASE + file);
+
+            const SCREAMERS_2 = [
+                "IMG_5612.jpeg", "IMG_5611.webp", "IMG_5610.jpeg", "IMG_5609.jpeg", "IMG_5608.jpeg"
+            ].map(file => BASE + file);
+
+            const AUDIO = {
+                walk: BASE + "5430e089a52a3a1.mp3",
+                outside: BASE + "c2b241eaaf1726a.mp3",
+                stairs: BASE + "4f51346b1355c30.mp3",
+                intro: BASE + "Голос%20002.m4a",
+                wrongCode: BASE + "Голос%20011.m4a",
+                code67: BASE + "Gazan%20-%2067%20(Six%20Seven)%20(новая%20музыка%202026).mp3",
+                code17: BASE + "202607151440_mix.m4a",
+                knock: BASE + "8307-obemnyi-stuk-v-dver.mp3",
+                afterKnock: BASE + "0e515af90bfbfda.mp3",
+                vladDialogue: BASE + "202607151940_mix.mp3",
+                chase1: BASE + "Голос%20008.m4a",
+                chase2: BASE + "Голос%20012.m4a",
+                fourthFloor: BASE + "Голос%20007.m4a",
+                scream1: BASE + "45376a1c5f028af.mp3",
+                scream2: BASE + "fsdsdfhh.mp3",
+                dayEnd: BASE + "улица%20Наумова%2068.m4a",
+                danger: BASE + "19b1572a48076b0.mp3"
+            };
+
+            const ICONS = [
+                "https://cdn-icons-png.flaticon.com/512/3202/3202907.png",
+                "https://cdn-icons-png.flaticon.com/512/96/96933.png"
+            ];
+
+            const TOTAL_RESOURCES = 40;
+            const audios = {};
+            const imageSizes = {};
+            const cooldowns = { water: 0, toilet: 0, broom: 0 };
+            const cooldownTimers = {};
+
+            let loaded = 0;
+            let resourcesReady = false;
+            let gameStarted = false;
+            let soundEnabled = true;
+            let currentDay = 1;
+            let currentFloor = 0;
+            let gameplayUnlocked = false;
+            let moving = false;
+            let dead = false;
+            let voiceFinished = false;
+            let secondScene = false;
+            let doorScene = false;
+            let doorLocked = false;
+            let chasing = false;
+            let anger = 15;
+            let silence = 0;
+            let silencePenaltyGiven = false;
+            let angerTimer = null;
+            let silenceTimer = null;
+            let dayTimer = null;
+            let generatorTimer = null;
+            let generatorTick = null;
+            let outage = false;
+            let outageStart = 0;
+            let outagePenalty = false;
+            let dangerSchedule = null;
+            let dangerStopTimer = null;
+            let dangerActive = false;
+            let taskCleanup = null;
+            let mathActive = false;
+            let mathTimer = null;
+            let mathSolved = 0;
+            let mathCorrect = 0;
+            let mathStart = 0;
+            let questionStart = 0;
+            let mathCooldown = 0;
+            let endingDay = false;
+
+            try {
+                mathCooldown = Number(localStorage.getItem("vlad_math_cooldown")) || 0;
+            } catch (error) {}
+
+            function resourceDone() {
+                loaded++;
+                loadingProgress.textContent = `${Math.min(loaded, TOTAL_RESOURCES)} / ${TOTAL_RESOURCES}`;
+                if (loaded >= TOTAL_RESOURCES) finishLoading();
+            }
+
+            function preloadImage(url, callback = () => {}) {
+                const image = new Image();
+                let done = false;
+                const finish = () => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeout);
+                    callback(image);
+                    resourceDone();
+                };
+                const timeout = setTimeout(finish, 9000);
+                image.onload = finish;
+                image.onerror = finish;
+                image.src = url;
+            }
+
+            function preloadAudio(name, url) {
+                const audio = new Audio();
+                audios[name] = audio;
+                audio.preload = "auto";
+                audio.src = url;
+                audio._ready = false;
+                audio._failed = false;
+
+                let done = false;
+                const success = () => {
+                    audio._ready = true;
+                    finish();
+                };
+                const failure = () => {
+                    audio._failed = true;
+                    finish();
+                };
+                const finish = () => {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timeout);
+                    resourceDone();
+                };
+                const timeout = setTimeout(failure, 9000);
+
+                audio.addEventListener("loadeddata", success, { once: true });
+                audio.addEventListener("canplaythrough", success, { once: true });
+                audio.addEventListener("error", failure, { once: true });
+                try { audio.load(); } catch (error) { failure(); }
+            }
+
+            function preloadAll() {
+                IMAGES.forEach((url, index) => {
+                    preloadImage(url, image => {
+                        if (image.naturalWidth) {
+                            imageSizes[index] = { width: image.naturalWidth, height: image.naturalHeight };
+                        }
+                    });
+                });
+                ICONS.forEach(url => preloadImage(url));
+                [...SCREAMERS_1, ...SCREAMERS_2].forEach(url => preloadImage(url));
+                Object.entries(AUDIO).forEach(([name, url]) => preloadAudio(name, url));
+                setTimeout(finishLoading, 11000);
+            }
+
+            function finishLoading() {
+                if (resourcesReady) return;
+                resourcesReady = true;
+                loading.classList.add("hidden");
+                startGate.classList.remove("hidden");
+            }
+
+            function play(name, options = {}) {
+                if (!soundEnabled && !options.force) return false;
+                const audio = audios[name];
+                if (!audio || audio._failed) return false;
+                try {
+                    audio.loop = !!options.loop;
+                    audio.volume = options.volume ?? 0.7;
+                    audio.currentTime = 0;
+                    audio.muted = false;
+                    const promise = audio.play();
+                    promise?.catch(() => {});
+                    return true;
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            function stop(name) {
+                const audio = audios[name];
+                if (!audio) return;
+                try {
+                    audio.pause();
+                    audio.currentTime = 0;
+                } catch (error) {}
+            }
+
+            function stopAll() {
+                Object.values(audios).forEach(audio => {
+                    try {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    } catch (error) {}
+                });
+            }
+
+            function playToEnd(name, callback, options = {}) {
+                const audio = audios[name];
+                let finished = false;
+
+                const finish = () => {
+                    if (finished) return;
+                    finished = true;
+                    audio?.removeEventListener("ended", finish);
+                    audio?.removeEventListener("error", finish);
+                    callback();
+                };
+
+                if (!audio || audio._failed) {
+                    finish();
+                    return;
+                }
+
+                audio.addEventListener("ended", finish, { once: true });
+                audio.addEventListener("error", finish, { once: true });
+
+                if (!play(name, options)) {
+                    finish();
+                }
+            }
+
+            startGate.addEventListener("pointerdown", event => {
+                event.preventDefault();
+                if (gameStarted || !resourcesReady) return;
+                gameStarted = true;
+                startGate.classList.add("hidden");
+                startDayOneStory();
+            }, { once: true });
+
+            $("soundBtn").addEventListener("click", event => {
+                event.stopPropagation();
+                soundEnabled = !soundEnabled;
+                $("soundBtn").textContent = soundEnabled ? "🔊" : "🔇";
+                if (!soundEnabled) {
+                    stopAll();
+                } else if (gameStarted && !dead) {
+                    play(currentDay >= 2 ? "stairs" : "outside", { loop: true, volume: 0.3 });
+                }
+            });
+
+            function startDayOneStory() {
+                currentDay = 1;
+                currentFloor = 0;
+                anger = 15;
+                silence = 0;
+                gameplayUnlocked = false;
+                scene.style.backgroundImage = `url('${IMAGES[0]}')`;
+                $("roundName").textContent = "День 1";
+                dialogue.textContent = "все начиналось возле старой 4 этажки Влада\nя хотел принести Владу бруско, но я его потерял\nя боялся сказать это Владу, потому что я знаю что бывает когда он злится";
+                dialogue.classList.remove("hidden");
+                play("outside", { loop: true, volume: 0.3 });
+                playToEnd("intro", showFirstGoButton, { volume: 0.8 });
+                updateUI();
+            }
+
+            function showFirstGoButton() {
+                if (voiceFinished) return;
+                voiceFinished = true;
+                dialogue.textContent = "эххх пора идти к Владу...";
+                nextBtn.classList.add("visible");
+                fallbackButtons();
+                repositionStoryButtons();
+            }
+
+            function cover(index) {
+                const size = imageSizes[index];
+                if (!size) return null;
+                const rect = scene.getBoundingClientRect();
+                const scale = Math.max(rect.width / size.width, rect.height / size.height);
+                return {
+                    x: (rect.width - size.width * scale) / 2,
+                    y: (rect.height - size.height * scale) / 2,
+                    scale
+                };
+            }
+
+            function position(x, y, element, imageIndex) {
+                const data = cover(imageIndex);
+                if (!data) return;
+                element.style.left = `${data.x + x * data.scale}px`;
+                element.style.top = `${data.y + y * data.scale}px`;
+            }
+
+            function fallbackButtons() {
+                if (!imageSizes[0]) {
+                    nextBtn.style.left = "61%";
+                    nextBtn.style.top = "36%";
+                }
+                if (!imageSizes[1]) {
+                    fingerBtn.style.left = "48%";
+                    fingerBtn.style.top = "25%";
+                }
+                if (!imageSizes[2]) {
+                    doorBtn.style.left = "79%";
+                    doorBtn.style.top = "33%";
+                }
+                // Fallback-координаты для адаптивности кнопок заданий
+                if (!imageSizes[9]) {
+                    waterBtn.style.left = "52.6%";
+                    waterBtn.style.top = "40.5%";
+                }
+                if (!imageSizes[7]) {
+                    toiletBtn.style.left = "55.6%";
+                    toiletBtn.style.top = "39%";
+                }
+                if (!imageSizes[6]) {
+                    broomBtn.style.left = "21.5%";
+                    broomBtn.style.top = "33.5%";
+                }
+                if (!imageSizes[10]) {
+                    mathBtn.style.left = "49.3%";
+                    mathBtn.style.top = "36.7%";
+                    mathLabel.style.left = "49.3%";
+                    mathLabel.style.top = "36.7%";
+                }
+                if (!imageSizes[5]) {
+                    noteBtn.style.left = "60.9%";
+                    noteBtn.style.top = "36.7%";
+                    generatorBtn.style.left = "61.5%";
+                    generatorBtn.style.top = "13%";
+                }
+            }
+
+            function repositionStoryButtons() {
+                if (nextBtn.classList.contains("visible")) position(1835, 1451, nextBtn, 0);
+                if (fingerBtn.classList.contains("visible")) position(1447, 1007, fingerBtn, 1);
+                if (doorBtn.classList.contains("visible")) position(2386, 1329, doorBtn, 2);
+            }
+
+            // Исправленная адаптивная расстановка интерактивных зон на фото
+            function repositionTaskButtons() {
+                if (waterBtn.classList.contains("visible")) position(2120, 1224, waterBtn, 9);
+                if (toiletBtn.classList.contains("visible")) position(2241, 1179, toiletBtn, 7);
+                if (broomBtn.classList.contains("visible")) position(866, 1013, broomBtn, 6);
+                if (mathBtn.classList.contains("visible")) {
+                    position(1987, 1109, mathBtn, 10);
+                    position(1987, 1109, mathLabel, 10);
+                }
+                if (noteBtn.classList.contains("visible")) position(2455, 1109, noteBtn, 5);
+                if (generatorBtn.classList.contains("visible")) position(2479, 393, generatorBtn, 5);
+            }
+
+            window.addEventListener("resize", () => {
+                repositionStoryButtons();
+                repositionTaskButtons();
+            });
+
+            nextBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                if (secondScene || dead) return;
+                secondScene = true;
+                nextBtn.classList.remove("visible");
+                dialogue.classList.add("hidden");
+                scene.classList.add("blurred");
+                playToEnd("walk", () => {
+                    currentFloor = 1;
+                    scene.style.backgroundImage = `url('${IMAGES[1]}')`;
+                    scene.classList.remove("blurred");
+                    fingerBtn.classList.add("visible");
+                    fallbackButtons();
+                    position(1447, 1007, fingerBtn, 1);
+                }, { volume: 0.5 });
+            });
+
+            fingerBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                if (!secondScene || dead) return;
+                codeOverlay.classList.add("active");
+                $("codeInput").focus();
+            });
+
+            $("codeSubmit").addEventListener("click", submitCode);
+            $("codeInput").addEventListener("keydown", event => {
+                if (event.key === "Enter") submitCode();
+            });
+
+            function submitCode() {
+                const value = $("codeInput").value.trim();
+                if (!value) {
+                    $("codeError").textContent = "Введите код";
+                    return;
+                }
+
+                codeOverlay.classList.remove("active");
+                fingerBtn.classList.remove("visible");
+
+                if (value === "17") {
+                    playToEnd("code17", enterDoorScene, { volume: 0.7 });
+                } else if (value === "67") {
+                    playToEnd("code67", () => lose("GAME OVER (код 67)"), { volume: 0.6 });
+                } else {
+                    playToEnd("wrongCode", () => lose("Неправильный код"), { volume: 0.8 });
+                }
+            }
+
+            function enterDoorScene() {
+                stop("outside");
+                play("stairs", { loop: true, volume: 0.3 });
+                scene.classList.add("blurred");
+                playToEnd("walk", () => {
+                    currentFloor = 2;
+                    scene.style.backgroundImage = `url('${IMAGES[2]}')`;
+                    scene.classList.remove("blurred");
+                    doorScene = true;
+                    dialogue.textContent = "ты пришёл к Владу...";
+                    dialogue.classList.remove("hidden");
+                    doorBtn.classList.add("visible");
+                    fallbackButtons();
+                    position(2386, 1329, doorBtn, 2);
+                }, { volume: 0.5 });
+            }
+
+            doorBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                if (!doorScene || doorLocked || dead) return;
+                doorLocked = true;
+                doorBtn.classList.remove("visible");
+                playToEnd("knock", () => {
+                    scene.classList.add("blurred");
+                    playToEnd("afterKnock", enterApartment, { volume: 0.6 });
+                }, { volume: 0.8 });
+            });
+
+            function enterApartment() {
+                currentFloor = 3;
+                scene.style.backgroundImage = `url('${IMAGES[3]}')`;
+                scene.classList.remove("blurred");
+                dialogue.textContent = "Влад: ты принес мой Напас??\nИГРОК: прости я его потерял.\nВЛАД: Если ты не найдёшь мой бруско, я съём тебя!!!";
+                dialogue.classList.remove("hidden");
+                playToEnd("vladDialogue", startChase, { volume: 0.7 });
+            }
+
+            function startChase() {
+                if (chasing) return;
+                chasing = true;
+                stop("stairs");
+                dialogue.classList.add("hidden");
+                scene.classList.add("chase");
+                playToEnd("chase1", () => {
+                    playToEnd("chase2", finishChase, { volume: 0.8 });
+                }, { volume: 0.8 });
+            }
+
+            function finishChase() {
+                scene.classList.remove("chase");
+                currentFloor = 4;
+                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                dialogue.textContent = "чтобы сбежать с подъезда Влада, мне нужно выполнить всего его задания и после этого может быть я вернусь домой живым";
+                dialogue.classList.remove("hidden");
+                playToEnd("fourthFloor", () => {
+                    dialogue.classList.add("hidden");
+                    unlockGameplay(1);
+                }, { volume: 0.8 });
+            }
+
+            function unlockGameplay(day) {
+                gameplayUnlocked = true;
+                hud.classList.remove("ui-hidden");
+                floorName.classList.remove("ui-hidden");
+                navUp.classList.remove("ui-hidden");
+                navDown.classList.remove("ui-hidden");
+                silenceMeter.classList.toggle("visible", day >= 2);
+                startRoundSystems();
+                updateUI();
+            }
+
+            function updateUI() {
+                floorName.textContent = FLOOR_NAMES[currentFloor];
+                $("roundName").textContent = `День ${currentDay}`;
+                navUp.disabled = !gameplayUnlocked || moving || currentFloor <= 4;
+                navDown.disabled = !gameplayUnlocked || moving || currentFloor >= 10;
+
+                const show = gameplayUnlocked && !moving && !dead && !endingDay;
+                waterBtn.classList.toggle("visible", show && currentFloor === 9);
+                toiletBtn.classList.toggle("visible", show && currentFloor === 7);
+                broomBtn.classList.toggle("visible", show && currentFloor === 6);
+                mathBtn.classList.toggle("visible", show && currentFloor === 10);
+                noteBtn.classList.toggle("visible", show && currentFloor === 5);
+                generatorBtn.classList.toggle("visible", show && currentFloor === 5);
+                
+                // Пересчитываем положение кнопок при изменении их видимости
+                fallbackButtons();
+                repositionTaskButtons();
+                repositionStoryButtons();
+
+                updateMeters();
+                updateMathCooldown();
+            }
+
+            function goFloor(delta) {
+                if (!gameplayUnlocked || moving || dead || endingDay || mathActive) return;
+                if (taskOverlay.classList.contains("active") || wireOverlay.classList.contains("active")) return;
+                if (currentFloor === 4 && delta < 0) return;
+
+                if (currentDay >= 2 && dangerActive) {
+                    lose("Ты пошевелился во время страшного звука");
+                    return;
+                }
+
+                const target = currentFloor + delta;
+                if (target < 4 || target > 10) return;
+
+                moving = true;
+                if (currentDay >= 2) addSilence(10);
+                scene.classList.add("blurred");
+                play("walk", { volume: 0.5 });
+                updateUI();
+
+                setTimeout(() => {
+                    currentFloor = target;
+                    scene.style.backgroundImage = `url('${IMAGES[target]}')`;
+                }, 1000);
+
+                setTimeout(() => {
+                    stop("walk");
+                    scene.classList.remove("blurred");
+                    moving = false;
+                    updateUI();
+                }, 2000);
+            }
+
+            navUp.addEventListener("click", event => {
+                event.stopPropagation();
+                goFloor(-1);
+            });
+
+            navDown.addEventListener("click", event => {
+                event.stopPropagation();
+                goFloor(1);
+            });
+
+            scene.addEventListener("click", event => {
+                const rect = scene.getBoundingClientRect();
+                $("coords").textContent = `📍 X: ${Math.round(event.clientX - rect.left)}  Y: ${Math.round(event.clientY - rect.top)}`;
+            });
+
+            function updateMeters() {
+                anger = Math.max(0, Math.min(100, anger));
+                silence = Math.max(0, Math.min(100, silence));
+                angerFill.style.width = `${anger}%`;
+                angerValue.textContent = `${Math.round(anger)}%`;
+                silenceFill.style.width = `${silence}%`;
+                silenceValue.textContent = `${Math.round(silence)}%`;
+
+                if (anger >= 50 && gameplayUnlocked) scene.classList.add("shake");
+                else scene.classList.remove("shake");
+
+                if (currentDay >= 2 && silence >= 50 && !silencePenaltyGiven) {
+                    silencePenaltyGiven = true;
+                    anger += 20;
+                    showToast("⚠️ Слишком шумно: +20% злости Влада");
+                    updateMeters();
+                    return;
+                }
+
+                if (silence < 50) silencePenaltyGiven = false;
+                if (currentDay >= 2 && silence >= 100) lose("Шкала «тишина» достигла 100%");
+                if (anger >= 100) lose("Злость Влада достигла 100%");
+            }
+
+            function addSilence(amount) {
+                if (currentDay < 2) return;
+                silence = Math.min(100, silence + amount);
+                updateMeters();
+            }
+
+            function reduceAnger(amount) {
+                anger = Math.max(0, anger - amount);
+                updateMeters();
+            }
+
+            function startRoundSystems() {
+                clearInterval(angerTimer);
+                clearInterval(silenceTimer);
+                clearTimeout(dayTimer);
+
+                angerTimer = setInterval(() => {
+                    if (dead || endingDay || mathActive || taskOverlay.classList.contains("active") || wireOverlay.classList.contains("active")) return;
+                    anger += currentDay >= 2 ? 0.8 : 0.5;
+                    updateMeters();
+                }, 1000);
+
+                if (currentDay >= 2) {
+                    silenceTimer = setInterval(() => {
+                        if (dead || endingDay || moving) return;
+                        silence = Math.max(0, silence - 1.5);
+                        updateMeters();
+                    }, 1000);
+                    scheduleDangerSound();
+                }
+
+                dayTimer = setTimeout(finishDay, currentDay === 1 ? 10 * 60 * 1000 : 17 * 60 * 1000);
+                scheduleGeneratorFailure();
+            }
+
+            function scheduleDangerSound() {
+                clearTimeout(dangerSchedule);
+                if (currentDay < 2 || dead || endingDay) return;
+                dangerSchedule = setTimeout(startDangerSound, randomInt(40, 120) * 1000);
+            }
+
+            function startDangerSound() {
+                if (currentDay < 2 || dead || endingDay) return;
+                dangerActive = true;
+                dangerWarning.classList.add("active");
+                play("danger", { volume: 0.95 });
+                const duration = randomInt(4, 10) * 1000;
+                clearTimeout(dangerStopTimer);
+                dangerStopTimer = setTimeout(() => {
+                    dangerActive = false;
+                    dangerWarning.classList.remove("active");
+                    stop("danger");
+                    scheduleDangerSound();
+                }, duration);
+            }
+
+            function taskStarted() {
+                if (currentDay >= 2 && dangerActive) {
+                    lose("Ты начал задание во время страшного звука");
+                    return false;
+                }
+                return true;
+            }
+
+            function showTask(type) {
+                if (!taskStarted() || dead) return;
+                if (cooldowns[type] > 0) {
+                    showToast(`⏳ Подождите ${cooldowns[type]} сек.`);
+                    return;
+                }
+                clearTask();
+                taskOverlay.classList.add("active");
+                if (type === "water") initWater();
+                if (type === "toilet") initToilet();
+                if (type === "broom") initBroom();
+            }
+
+            function clearTask() {
+                if (typeof taskCleanup === "function") taskCleanup();
+                taskCleanup = null;
+            }
+
+            function closeTask() {
+                clearTask();
+                taskOverlay.classList.remove("active");
+            }
+
+            function setCooldown(type, seconds) {
+                cooldowns[type] = seconds;
+                clearInterval(cooldownTimers[type]);
+                cooldownTimers[type] = setInterval(() => {
+                    cooldowns[type]--;
+                    if (cooldowns[type] <= 0) {
+                        cooldowns[type] = 0;
+                        clearInterval(cooldownTimers[type]);
+                    }
+                }, 1000);
+            }
+
+            function completeTask(type) {
+                setCooldown(type, 60);
+                reduceAnger(5);
+                if (currentDay >= 2) addSilence(15);
+                showToast("✅ Задание выполнено! −5% злости");
+                setTimeout(closeTask, 500);
+            }
+
+            function overlap(a, b) {
+                return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+            }
+
+            function initWater() {
+                const goal = 2 + Math.random() * 4;
+                $("taskTitle").textContent = "💧 Полей цветочки";
+                $("taskDescription").textContent = `Поднеси стакан и удерживай ${goal.toFixed(1)} сек.`;
+                gameArea.innerHTML = `
+                    <div class="hint">Перетащи стакан к цветку</div>
+                    <div class="flower" id="flower"><img src="https://cdn-icons-png.flaticon.com/512/5605/5605057.png"></div>
+                    <div class="glass" id="glass"><img src="https://cdn-icons-png.flaticon.com/512/1864/1864846.png"></div>
+                    <div class="progress"><div class="progress-fill" id="taskFill"></div></div>`;
+
+                const flower = $("flower");
+                const glass = $("glass");
+                const fill = $("taskFill");
+                let dragging = false;
+                let startedAt = 0;
+                let timer = null;
+                let completed = false;
+
+                function reset() {
+                    startedAt = 0;
+                    clearInterval(timer);
+                    fill.style.width = "0%";
+                    flower.classList.remove("active");
+                }
+
+                glass.onpointerdown = event => {
+                    dragging = true;
+                    glass.setPointerCapture?.(event.pointerId);
+                };
+
+                gameArea.onpointermove = event => {
+                    if (!dragging || completed) return;
+                    
+                    // Поражение, если пошевелился во время страшного звука
+                    if (currentDay >= 2 && dangerActive) {
+                        lose("Ты пошевелился во время страшного звука");
+                        return;
+                    }
+
+                    const rect = gameArea.getBoundingClientRect();
+                    glass.style.left = `${Math.max(35, Math.min(rect.width - 35, event.clientX - rect.left))}px`;
+                    glass.style.top = `${Math.max(40, Math.min(rect.height - 40, event.clientY - rect.top))}px`;
+                    const inside = overlap(glass.getBoundingClientRect(), flower.getBoundingClientRect());
+
+                    if (inside && !startedAt) {
+                        startedAt = performance.now();
+                        flower.classList.add("active");
+                        timer = setInterval(() => {
+                            const elapsed = (performance.now() - startedAt) / 1000;
+                            fill.style.width = `${Math.min(100, elapsed / goal * 100)}%`;
+                            if (elapsed >= goal && !completed) {
+                                completed = true;
+                                clearInterval(timer);
+                                completeTask("water");
+                            }
+                        }, 40);
+                    } else if (!inside && startedAt) {
+                        reset();
+                    }
+                };
+
+                gameArea.onpointerup = () => {
+                    if (completed) return;
+                    dragging = false;
+                    glass.style.left = "78%";
+                    glass.style.top = "50%";
+                    reset();
+                };
+
+                taskCleanup = () => clearInterval(timer);
+            }
+
+            function initToilet() {
+                const goal = 2 + Math.random() * 4;
+                $("taskTitle").textContent = "💦 Нассы на санный угол";
+                $("taskDescription").textContent = `Быстро нажимай ${goal.toFixed(1)} сек.`;
+                gameArea.innerHTML = `
+                    <div class="hint">Нажимай быстро и не останавливайся</div>
+                    <div class="toilet" id="toilet"><img src="https://cdn-icons-png.flaticon.com/512/6152/6152264.png"><div class="pee" id="pee"></div></div>
+                    <div class="progress"><div class="progress-fill" id="taskFill" style="background:#dfad00"></div></div>`;
+
+                const toilet = $("toilet");
+                const pee = $("pee");
+                const fill = $("taskFill");
+                let active = 0;
+                let lastTick = performance.now();
+                let lastTap = 0;
+                let taps = 0;
+                let completed = false;
+
+                toilet.onpointerdown = event => {
+                    event.preventDefault();
+                    
+                    // Поражение, если нажал во время страшного звука
+                    if (currentDay >= 2 && dangerActive) {
+                        lose("Ты пошевелился во время страшного звука");
+                        return;
+                    }
+
+                    lastTap = performance.now();
+                    taps++;
+                };
+
+                const timer = setInterval(() => {
+                    const now = performance.now();
+                    const delta = Math.min(100, now - lastTick);
+                    lastTick = now;
+                    if (lastTap && now - lastTap < 420 && taps >= 2) active += delta;
+                    else if (now - lastTap > 850) active = Math.max(0, active - delta * 0.45);
+
+                    const percent = Math.min(100, active / (goal * 1000) * 100);
+                    fill.style.width = `${percent}%`;
+                    pee.style.height = `${percent * 0.76}px`;
+                    if (percent >= 100 && !completed) {
+                        completed = true;
+                        clearInterval(timer);
+                        completeTask("toilet");
+                    }
+                }, 50);
+
+                taskCleanup = () => clearInterval(timer);
+            }
+
+            function initBroom() {
+                const goal = 3 + Math.random() * 4;
+                $("taskTitle").textContent = "🧹 Подмети пол";
+                $("taskDescription").textContent = `Води метлой ${goal.toFixed(1)} сек.`;
+                gameArea.innerHTML = `
+                    <div class="broom-floor" id="broomFloor">
+                        <div class="hint">Зажми метлу и води по полу</div>
+                        <div class="dirt" id="dirt"></div>
+                        <div class="broom" id="broom"><img src="https://cdn-icons-png.flaticon.com/512/4584/4584372.png"></div>
+                        <div class="progress"><div class="progress-fill" id="taskFill"></div></div>
+                    </div>`;
+
+                const floor = $("broomFloor");
+                const broom = $("broom");
+                const dirt = $("dirt");
+                const fill = $("taskFill");
+                let dragging = false;
+                let active = 0;
+                let lastTick = performance.now();
+                let lastMove = 0;
+                let oldX = 0;
+                let oldY = 0;
+                let completed = false;
+
+                broom.onpointerdown = event => {
+                    dragging = true;
+                    oldX = event.clientX;
+                    oldY = event.clientY;
+                    lastMove = performance.now();
+                    broom.setPointerCapture?.(event.pointerId);
+                };
+
+                floor.onpointermove = event => {
+                    if (!dragging) return;
+
+                    // Поражение, если пошевелился во время страшного звука
+                    if (currentDay >= 2 && dangerActive) {
+                        lose("Ты пошевелился во время страшного звука");
+                        return;
+                    }
+
+                    const rect = floor.getBoundingClientRect();
+                    broom.style.left = `${Math.max(35, Math.min(rect.width - 35, event.clientX - rect.left))}px`;
+                    broom.style.top = `${Math.max(35, Math.min(rect.height - 35, event.clientY - rect.top))}px`;
+                    if (Math.hypot(event.clientX - oldX, event.clientY - oldY) > 2) lastMove = performance.now();
+                    oldX = event.clientX;
+                    oldY = event.clientY;
+                };
+
+                floor.onpointerup = () => { dragging = false; };
+
+                const timer = setInterval(() => {
+                    const now = performance.now();
+                    const delta = Math.min(100, now - lastTick);
+                    lastTick = now;
+                    if (dragging && now - lastMove < 180) active += delta;
+                    const percent = Math.min(100, active / (goal * 1000) * 100);
+                    fill.style.width = `${percent}%`;
+                    dirt.style.opacity = String(1 - percent / 100);
+                    if (percent >= 100 && !completed) {
+                        completed = true;
+                        clearInterval(timer);
+                        completeTask("broom");
+                    }
+                }, 50);
+
+                taskCleanup = () => clearInterval(timer);
+            }
+
+            waterBtn.addEventListener("click", event => { event.stopPropagation(); showTask("water"); });
+            toiletBtn.addEventListener("click", event => { event.stopPropagation(); showTask("toilet"); });
+            broomBtn.addEventListener("click", event => { event.stopPropagation(); showTask("broom"); });
+            $("taskClose").addEventListener("click", closeTask);
+
+            function randomInt(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            function createProblem() {
+                const type = randomInt(0, 3);
+                if (type === 0) {
+                    const a = randomInt(24, 99), b = randomInt(16, 89);
+                    return { text: `${a} + ${b} = ?`, answer: a + b };
+                }
+                if (type === 1) {
+                    const a = randomInt(60, 140), b = randomInt(18, a - 7);
+                    return { text: `${a} − ${b} = ?`, answer: a - b };
+                }
+                if (type === 2) {
+                    const a = randomInt(4, 12), b = randomInt(4, 12);
+                    return { text: `${a} × ${b} = ?`, answer: a * b };
+                }
+                const b = randomInt(3, 12), answer = randomInt(3, 12);
+                return { text: `${b * answer} ÷ ${b} = ?`, answer };
+            }
+
+            function startMath() {
+                if (!taskStarted() || dead || Date.now() < mathCooldown) return;
+                mathActive = true;
+                mathSolved = 0;
+                mathStart = performance.now();
+                mathOverlay.classList.add("active");
+                nextProblem();
+                clearInterval(mathTimer);
+                mathTimer = setInterval(mathTick, 50);
+            }
+
+            function nextProblem() {
+                const problem = createProblem();
+                mathCorrect = problem.answer;
+                $("mathProblem").textContent = problem.text;
+                $("mathCount").textContent = `${mathSolved + 1} / 3`;
+                $("mathInput").value = "";
+                $("mathError").textContent = "";
+                questionStart = performance.now();
+                $("mathInput").focus();
+            }
+
+            function mathTick() {
+                if (!mathActive) return;
+                
+                // Проигрыш, если решаешь математику во время страшного звука на 2-й день
+                if (currentDay >= 2 && dangerActive) {
+                    closeMath();
+                    lose("Ты делал задание во время страшного звука");
+                    return;
+                }
+
+                const now = performance.now();
+                const questionLeft = Math.max(0, 10000 - (now - questionStart));
+                const totalLeft = Math.max(0, 30000 - (now - mathStart));
+                $("mathQuestionTime").textContent = (questionLeft / 1000).toFixed(1);
+                $("mathTotalTime").textContent = (totalLeft / 1000).toFixed(1);
+                $("mathTimeFill").style.width = `${questionLeft / 100}%`;
+                if (questionLeft <= 0) lose("Ты не решил пример за 10 секунд");
+                else if (totalLeft <= 0) lose("Ты не решил 3 примера за 30 секунд");
+            }
+
+            function submitMath() {
+                if (currentDay >= 2 && dangerActive) {
+                    closeMath();
+                    lose("Ты делал задание во время страшного звука");
+                    return;
+                }
+
+                const raw = $("mathInput").value.trim();
+                if (raw === "" || Number(raw) !== mathCorrect) {
+                    $("mathError").textContent = raw === "" ? "Введите число" : "❌ Неверно!";
+                    return;
+                }
+
+                mathSolved++;
+                if (mathSolved < 3) {
+                    nextProblem();
+                    return;
+                }
+
+                mathActive = false;
+                clearInterval(mathTimer);
+                mathOverlay.classList.remove("active");
+                reduceAnger(20);
+                if (currentDay >= 2) addSilence(15);
+                mathCooldown = Date.now() + 90000;
+                try { localStorage.setItem("vlad_math_cooldown", String(mathCooldown)); } catch (error) {}
+                showToast("✅ Задание выполнено! −20% злости");
+            }
+
+            function closeMath() {
+                mathActive = false;
+                clearInterval(mathTimer);
+                mathOverlay.classList.remove("active");
+                updateUI();
+            }
+
+            $("mathClose").addEventListener("click", closeMath);
+
+            function updateMathCooldown() {
+                const left = Math.max(0, mathCooldown - Date.now());
+                mathBtn.disabled = left > 0;
+                mathBtn.classList.toggle("cooldown", left > 0);
+                if (left > 0 && currentFloor === 10 && gameplayUnlocked) {
+                    const seconds = Math.ceil(left / 1000);
+                    mathLabel.textContent = `КД ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+                    mathLabel.classList.add("visible");
+                } else {
+                    mathLabel.classList.remove("visible");
+                }
+            }
+
+            mathBtn.addEventListener("click", event => { event.stopPropagation(); startMath(); });
+            $("mathSubmit").addEventListener("click", submitMath);
+            $("mathInput").addEventListener("keydown", event => {
+                if (event.key === "Enter") submitMath();
+            });
+            setInterval(updateMathCooldown, 250);
+
+            noteBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                noteOverlay.classList.add("active");
+            });
+            $("noteClose").addEventListener("click", () => noteOverlay.classList.remove("active"));
+
+            function scheduleGeneratorFailure() {
+                clearTimeout(generatorTimer);
+                if (dead || endingDay) return;
+                generatorTimer = setTimeout(beginOutage, randomInt(30, 120) * 1000);
+            }
+
+            function beginOutage() {
+                if (dead || outage || endingDay) return;
+                outage = true;
+                outageStart = Date.now();
+                outagePenalty = false;
+                blackout.classList.add("active");
+                powerWarning.classList.add("active");
+                clearInterval(generatorTick);
+                generatorTick = setInterval(() => {
+                    const elapsed = (Date.now() - outageStart) / 1000;
+                    powerWarning.textContent = `⚡ ГЕНЕРАТОР ОТКЛЮЧЁН: ${Math.max(0, 30 - Math.floor(elapsed))}`;
+                    if (elapsed >= 15 && !outagePenalty) {
+                        outagePenalty = true;
+                        anger += 5;
+                        updateMeters();
+                    }
+                    if (elapsed >= 30) lose("Ты не починил генератор за 30 секунд");
+                }, 250);
+            }
+
+            function repairGenerator() {
+                outage = false;
+                clearInterval(generatorTick);
+                blackout.classList.remove("active");
+                powerWarning.classList.remove("active");
+                wireOverlay.classList.remove("active");
+                reduceAnger(10);
+                if (currentDay >= 2) addSilence(15);
+                showToast("⚡ Свет восстановлен! −10% злости");
+                scheduleGeneratorFailure();
+            }
+
+            generatorBtn.addEventListener("click", event => {
+                event.stopPropagation();
+                if (!taskStarted()) return;
+                if (!outage) {
+                    showToast("✅ Генератор пока работает");
+                    return;
+                }
+                openWires();
+            });
+
+            function openWires() {
+                const board = $("wireBoard");
+                const svg = $("wireSvg");
+                const colors = ["#ff3b30", "#34c759", "#0a84ff", "#ffd60a"];
+                const leftY = [18, 39, 61, 82];
+                const rightY = [61, 18, 82, 39];
+                const connected = new Set();
+                let dragged = null;
+                let tempLine = null;
+
+                board.querySelectorAll(".terminal").forEach(element => element.remove());
+                svg.innerHTML = "";
+
+                colors.forEach((color, index) => {
+                    ["left", "right"].forEach(side => {
+                        const terminal = document.createElement("div");
+                        terminal.className = `terminal ${side}`;
+                        terminal.style.top = `${side === "left" ? leftY[index] : rightY[index]}%`;
+                        terminal.style.background = color;
+                        terminal.style.color = color;
+                        terminal.dataset.color = String(index);
+                        board.appendChild(terminal);
+                    });
+                });
+
+                function point(element) {
+                    const boardRect = board.getBoundingClientRect();
+                    const rect = element.getBoundingClientRect();
+                    return {
+                        x: rect.left + rect.width / 2 - boardRect.left,
+                        y: rect.top + rect.height / 2 - boardRect.top
+                    };
+                }
+
+                function line(x1, y1, x2, y2, color) {
+                    const element = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    element.setAttribute("x1", x1);
+                    element.setAttribute("y1", y1);
+                    element.setAttribute("x2", x2);
+                    element.setAttribute("y2", y2);
+                    element.setAttribute("stroke", color);
+                    element.setAttribute("stroke-width", "10");
+                    element.setAttribute("stroke-linecap", "round");
+                    svg.appendChild(element);
+                    return element;
+                }
+
+                board.onpointerdown = event => {
+                    const terminal = event.target.closest(".terminal.left");
+                    if (!terminal || connected.has(terminal.dataset.color)) return;
+                    dragged = terminal;
+                    const start = point(terminal);
+                    tempLine = line(start.x, start.y, start.x, start.y, colors[Number(terminal.dataset.color)]);
+                };
+
+                board.onpointermove = event => {
+                    if (!dragged) return;
+
+                    // Поражение, если чинишь генератор во время страшного звука
+                    if (currentDay >= 2 && dangerActive) {
+                        tempLine.remove();
+                        dragged = null;
+                        tempLine = null;
+                        wireOverlay.classList.remove("active");
+                        lose("Ты делал задание во время страшного звука");
+                        return;
+                    }
+
+                    const rect = board.getBoundingClientRect();
+                    tempLine.setAttribute("x2", event.clientX - rect.left);
+                    tempLine.setAttribute("y2", event.clientY - rect.top);
+                };
+
+                board.onpointerup = event => {
+                    if (!dragged) return;
+                    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".terminal.right");
+                    const color = dragged.dataset.color;
+
+                    if (target && target.dataset.color === color) {
+                        const start = point(dragged);
+                        const end = point(target);
+                        tempLine.remove();
+                        line(start.x, start.y, end.x, end.y, colors[Number(color)]);
+                        connected.add(color);
+                        dragged.style.opacity = "0.45";
+                        target.style.opacity = "0.45";
+                        $("wireStatus").textContent = `Соединено: ${connected.size} / 4`;
+                        if (connected.size === 4) setTimeout(repairGenerator, 300);
+                    } else {
+                        tempLine.remove();
+                    }
+                    dragged = null;
+                    tempLine = null;
+                };
+
+                $("wireStatus").textContent = "Соединено: 0 / 4";
+                wireOverlay.classList.add("active");
+            }
+
+            $("wireClose").addEventListener("click", () => wireOverlay.classList.remove("active"));
+
+            function finishDay() {
+                if (dead || endingDay) return;
+                endingDay = true;
+                stopRoundSystems();
+                closeTask();
+                mathOverlay.classList.remove("active");
+                wireOverlay.classList.remove("active");
+                noteOverlay.classList.remove("active");
+                blackout.classList.remove("active");
+                powerWarning.classList.remove("active");
+                dangerWarning.classList.remove("active");
+                stopAll();
+
+                $("dayTitle").textContent = "Вы прожили один день..";
+                $("daySubtitle").textContent = `День ${currentDay} завершён. Следующий день скоро начнётся`;
+                dayScreen.classList.add("active");
+
+                playToEnd("dayEnd", startNextDay, { volume: 1 });
+            }
+
+            function startNextDay() {
+                currentDay++;
+                endingDay = false;
+                dayScreen.classList.remove("active");
+                gameplayUnlocked = true;
+                currentFloor = 4;
+                anger = 50;
+                silence = 0;
+                silencePenaltyGiven = false;
+                outage = false;
+                dangerActive = false;
+                scene.style.backgroundImage = `url('${IMAGES[4]}')`;
+                dayDarkness.classList.add("active");
+                silenceMeter.classList.add("visible");
+                dialogue.classList.add("hidden");
+                stopAll();
+                play("stairs", { loop: true, volume: 0.36 });
+                showToast(`🌙 Начался день ${currentDay}`);
+                updateUI();
+                startRoundSystems();
+            }
+
+            function stopRoundSystems() {
+                clearInterval(angerTimer);
+                clearInterval(silenceTimer);
+                clearTimeout(dayTimer);
+                clearTimeout(generatorTimer);
+                clearInterval(generatorTick);
+                clearTimeout(dangerSchedule);
+                clearTimeout(dangerStopTimer);
+                dangerActive = false;
+            }
+
+            function randomFrom(array) {
+                return array[Math.floor(Math.random() * array.length)];
+            }
+
+            function lose(reason) {
+                if (dead) return;
+                dead = true;
+                stopRoundSystems();
+                clearInterval(mathTimer);
+                clearTask();
+                [codeOverlay, taskOverlay, mathOverlay, noteOverlay, wireOverlay].forEach(element => element.classList.remove("active"));
+                dangerWarning.classList.remove("active");
+                powerWarning.classList.remove("active");
+                $("gameoverReason").textContent = reason;
+                updateUI();
+                stopAll();
+
+                screamerImage.src = randomFrom(SCREAMERS_1);
+                screamer.classList.remove("second");
+                screamer.classList.add("active");
+                play("scream1", { volume: 1, force: true });
+
+                setTimeout(() => {
+                    screamerImage.src = randomFrom(SCREAMERS_2);
+                    screamer.classList.add("second");
+                    stop("scream1");
+                    play("scream2", { volume: 1, force: true });
+                }, 5000);
+
+                setTimeout(() => {
+                    stop("scream2");
+                    screamer.classList.remove("active", "second");
+                    gameover.classList.add("active");
+                }, 9000);
+            }
+
+            function showToast(text) {
+                const toast = $("toast");
+                toast.textContent = text;
+                toast.classList.add("show");
+                setTimeout(() => toast.classList.remove("show"), 2500);
+            }
+
+            function updateClock() {
+                const now = new Date();
+                $("clock").textContent = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+            }
+
+            updateClock();
+            setInterval(updateClock, 30000);
+            preloadAll();
+        })();
+    </script>
+</body>
+</html>
