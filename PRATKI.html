@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Прятки в Бобруйске</title>
-    <!-- ВСТАВЬТЕ СВОЙ API-КЛЮЧ ЯНДЕКС.КАРТ -->
-    <script src="https://api-maps.yandex.ru/2.1/?apikey=ВАШ_КЛЮЧ_ЯНДЕКСА&lang=ru_RU" type="text/javascript"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -79,6 +81,7 @@
             border-radius: 12px;
             margin: 10px 0;
             background: #e9eef2;
+            z-index: 1;
         }
         .status-bar {
             padding: 10px 0;
@@ -156,7 +159,7 @@
     <div id="screen3" class="screen">
         <h2>🗺️ Бобруйск</h2>
         <div id="map"></div>
-        <div id="map-error" class="error-msg">⚠️ Не удалось загрузить карту. Проверьте интернет и API-ключ.</div>
+        <div id="map-error" class="error-msg">⚠️ Не удалось загрузить карту. Проверьте интернет.</div>
         <div class="status-bar" id="status">Загрузка карты...</div>
     </div>
 </div>
@@ -168,7 +171,7 @@
     // --- Глобальные переменные ---
     let tg = window.Telegram.WebApp;
     let map = null;
-    let placemark = null;
+    let marker = null;
     let watchId = null;
     let gameId = null;
     let role = null;
@@ -212,9 +215,9 @@
                 };
                 document.getElementById('geoStatus').innerHTML =
                     `✅ Местоположение определено (${userCoords.lat.toFixed(4)}, ${userCoords.lon.toFixed(4)})`;
-                if (placemark && mapReady) {
-                    placemark.geometry.setCoordinates([userCoords.lat, userCoords.lon]);
-                    map.setCenter([userCoords.lat, userCoords.lon], 14);
+                if (marker && mapReady) {
+                    marker.setLatLng([userCoords.lat, userCoords.lon]);
+                    map.setView([userCoords.lat, userCoords.lon], 14);
                 }
             },
             function(err) {
@@ -235,7 +238,7 @@
         if (num === 2) {
             const seeker = document.getElementById('seeker_id').value.trim();
             if (!seeker) { alert('Введите ID искателя'); return; }
-            requestGeolocation(); // повторный запрос по действию пользователя
+            requestGeolocation();
         }
         showScreen(num);
     }
@@ -260,36 +263,42 @@
         document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления.';
     }
 
-    // --- Карта ---
+    // --- Инициализация карты (Leaflet + OSM + спутниковый слой Esri) ---
     function initMap() {
         if (mapReady) return;
         try {
-            ymaps.ready(function() {
-                let center = userCoords ? [userCoords.lat, userCoords.lon] : [53.1389, 29.2211];
-                map = new ymaps.Map('map', {
-                    center: center,
-                    zoom: 14,
-                    controls: ['zoomControl', 'fullscreenControl']
-                });
-                map.setType('satellite');
+            const center = userCoords ? [userCoords.lat, userCoords.lon] : [53.1389, 29.2211];
+            map = L.map('map').setView(center, 14);
 
-                placemark = new ymaps.Placemark(center, {
-                    hintContent: 'Вы здесь',
-                }, {
-                    preset: 'islands#redCircleIcon',
-                    draggable: false
-                });
-                map.geoObjects.add(placemark);
+            // Основной слой – OpenStreetMap (для подписи)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
 
-                if (!userCoords) requestGeolocation();
+            // Спутниковый слой – Esri World Imagery (бесплатно, без ключа)
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri'
+            }).addTo(map);
 
-                mapReady = true;
-                document.getElementById('map-error').style.display = 'none';
-                document.getElementById('status').innerText = 'Карта загружена';
+            // Маркер пользователя
+            const icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background:#ff4444;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
             });
+            marker = L.marker(center, { icon: icon, draggable: false }).addTo(map)
+                .bindPopup('Вы здесь');
+
+            if (!userCoords) requestGeolocation();
+
+            mapReady = true;
+            document.getElementById('map-error').style.display = 'none';
+            document.getElementById('status').innerText = 'Карта загружена';
         } catch (e) {
+            console.error('Ошибка карты:', e);
             document.getElementById('map-error').style.display = 'block';
-            document.getElementById('status').innerText = '❌ Ошибка карты. Проверьте API-ключ.';
+            document.getElementById('status').innerText = '❌ Ошибка карты. Проверьте интернет.';
         }
     }
 
@@ -307,9 +316,9 @@
                     lon: pos.coords.longitude
                 };
                 tg.sendData(JSON.stringify(payload));
-                if (placemark && mapReady) {
-                    placemark.geometry.setCoordinates([pos.coords.latitude, pos.coords.longitude]);
-                    map.setCenter([pos.coords.latitude, pos.coords.longitude], 14);
+                if (marker && mapReady) {
+                    marker.setLatLng([pos.coords.latitude, pos.coords.longitude]);
+                    map.setView([pos.coords.latitude, pos.coords.longitude], 14);
                 }
                 document.getElementById('status').innerText =
                     `📍 Отправлено: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
