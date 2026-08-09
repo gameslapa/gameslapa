@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Прятки в Бобруйске</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -73,9 +73,15 @@
         }
         .btn:hover { background: #1a6fcf; }
         .btn:active { transform: scale(0.97); }
+        .btn-secondary { background: #6c757d; }
+        .btn-secondary:hover { background: #5a6268; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
         #map {
             flex: 1;
-            min-height: 300px;
+            min-height: 250px;
             border-radius: 12px;
             margin: 10px 0;
             background: #e9eef2;
@@ -93,11 +99,7 @@
             color: #888;
             margin-top: 4px;
         }
-        .back-btn {
-            background: #eee;
-            color: #333;
-            margin-top: 5px;
-        }
+        .back-btn { background: #eee; color: #333; margin-top: 5px; }
         .back-btn:hover { background: #ddd; }
         .error-msg {
             color: #d32f2f;
@@ -133,17 +135,68 @@
             pointer-events: none;
         }
         .toast.show { opacity: 1; }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 90%;
+            width: 360px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .modal h3 { margin-bottom: 16px; text-align: center; }
+        .modal .input-group { margin-bottom: 12px; }
+        .modal .btn { margin-top: 6px; }
+        .modal .btn-close { background: #dc3545; }
+        .modal .btn-close:hover { background: #c82333; }
+        .hider-list {
+            margin: 10px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .hider-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .hider-item:last-child { border-bottom: none; }
+        .hider-item .name { font-weight: 500; }
+        .hider-item .coords { font-size: 12px; color: #666; }
+        .hider-item .del-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 14px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <!-- Экран 1 -->
+    <!-- Экран 1: ввод искателя -->
     <div id="screen1" class="screen active">
         <h2>🔍 Кто ищет?</h2>
         <div class="input-group">
-            <label>Telegram ID искателя</label>
-            <input type="number" id="seeker_id" placeholder="123456789" inputmode="numeric">
-            <div class="hint">Введите числовой ID пользователя</div>
+            <label>Ваш Telegram ID (искатель)</label>
+            <input type="number" id="seeker_id" placeholder="123456789" inputmode="numeric" />
+            <div class="hint">Введите свой числовой ID, чтобы получать уведомления</div>
         </div>
         <button class="btn" onclick="goToScreen(2)">Далее →</button>
         <div style="text-align:center;margin-top:15px;">
@@ -151,14 +204,19 @@
         </div>
     </div>
 
-    <!-- Экран 2 -->
+    <!-- Экран 2: добавление прячущихся -->
     <div id="screen2" class="screen">
         <h2>🙈 Кто прячется?</h2>
         <div class="input-group">
-            <label>ID прячущихся (через запятую)</label>
-            <input type="text" id="hiders_ids" placeholder="111, 222, 333">
-            <div class="hint">Перечислите числовые ID через запятую</div>
+            <label>Имя прячущегося</label>
+            <input type="text" id="hider_name" placeholder="Антон" />
         </div>
+        <div style="display:flex; gap:8px;">
+            <button class="btn" style="flex:1;" onclick="addHiderManual()">➕ Добавить вручную</button>
+            <button class="btn btn-success" style="flex:1;" onclick="addHiderGeo()">📍 Добавить мою геолокацию</button>
+        </div>
+        <div class="hint">Или введите координаты вручную после добавления</div>
+        <div id="hiderList" class="hider-list"></div>
         <button class="btn" onclick="startGame()">🚀 Начать игру</button>
         <button class="btn back-btn" onclick="goToScreen(1)">← Назад</button>
         <div style="text-align:center;margin-top:10px;">
@@ -169,92 +227,306 @@
     <!-- Экран 3: карта -->
     <div id="screen3" class="screen">
         <h2>🗺️ Бобруйск</h2>
+        <div style="display:flex; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+            <button class="btn btn-secondary" style="flex:1;" onclick="openCheckModal()">🔍 Проверить геолокацию</button>
+            <button class="btn btn-secondary" style="flex:1;" onclick="sendManualUpdate()">📤 Отправить координаты сейчас</button>
+        </div>
         <div id="map"></div>
         <div id="map-error" class="error-msg">⚠️ Не удалось загрузить карту. Проверьте интернет.</div>
         <div class="status-bar" id="status">Загрузка карты...</div>
     </div>
 </div>
 
+<!-- Модальное окно проверки -->
+<div class="modal-overlay" id="checkModal">
+    <div class="modal">
+        <h3>🔎 Проверка координат</h3>
+        <div class="input-group">
+            <label>Широта</label>
+            <input type="text" id="checkLat" placeholder="53.1389" />
+        </div>
+        <div class="input-group">
+            <label>Долгота</label>
+            <input type="text" id="checkLon" placeholder="29.2211" />
+        </div>
+        <button class="btn" onclick="checkLocation()">Проверить</button>
+        <button class="btn btn-close" onclick="closeCheckModal()">Закрыть</button>
+    </div>
+</div>
+
+<!-- Модальное окно для ручного ввода координат -->
+<div class="modal-overlay" id="coordModal">
+    <div class="modal">
+        <h3>✏️ Введите координаты</h3>
+        <div class="input-group">
+            <label>Имя</label>
+            <input type="text" id="editName" />
+        </div>
+        <div class="input-group">
+            <label>Широта</label>
+            <input type="text" id="editLat" placeholder="53.1389" />
+        </div>
+        <div class="input-group">
+            <label>Долгота</label>
+            <input type="text" id="editLon" placeholder="29.2211" />
+        </div>
+        <button class="btn" onclick="saveEditedHider()">Сохранить</button>
+        <button class="btn btn-close" onclick="closeCoordModal()">Отмена</button>
+    </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
 <script>
+    // ===== КОНФИГУРАЦИЯ =====
     const BOT_TOKEN = '8817333207:AAHvIQOGdt8Sqr51RsKmmcbVie5wLn3f_38';
     const APP_URL = window.location.origin + window.location.pathname;
 
+    // ===== Глобальные =====
     let tg = window.Telegram.WebApp;
-    let map = null;
-    let marker = null;
-    let watchId = null;
-    let role = null;
-    let mapReady = false;
-    let userCoords = null;
+    let map = null, marker = null, checkMarker = null;
+    let mapReady = false, userCoords = null;
+    let hiders = []; // массив {id, name, lat, lon}
+    let seekerId = null;
+    let timerInterval = null;
 
+    // ===== Инициализация =====
     function init() {
         tg.ready();
         requestGeolocation();
+
+        // Загружаем сохранённые данные
+        const saved = localStorage.getItem('hidersData');
+        if (saved) {
+            try {
+                hiders = JSON.parse(saved);
+                renderHiderList();
+            } catch(e) {}
+        }
+        const savedSeeker = localStorage.getItem('seekerId');
+        if (savedSeeker) {
+            document.getElementById('seeker_id').value = savedSeeker;
+        }
+
         const params = new URLSearchParams(window.location.search);
-        role = params.get('role');
-        if (role) {
+        const role = params.get('role');
+        if (role === 'seeker') {
+            // Искатель сразу на карту
             showScreen(3);
             initMap();
-            if (role === 'hider') {
-                startLocationTracking();
-                document.getElementById('status').innerText = '📍 Отправляем вашу геолокацию...';
-            } else {
-                document.getElementById('status').innerText = '👀 Вы искатель, ожидайте координаты прячущихся.';
-            }
+            document.getElementById('status').innerText = '👀 Вы искатель. Используйте карту.';
+            startAutoSend();
+        } else if (role === 'hider') {
+            // Прячущийся – добавляем себя и переходим на карту
+            showScreen(2);
+            document.getElementById('hider_name').value = tg.initDataUnsafe?.user?.first_name || 'Игрок';
+            addHiderGeo();
+            showScreen(3);
+            initMap();
+            document.getElementById('status').innerText = '📍 Вы прячетесь. Ваша геолокация отправлена.';
+            // Запускаем периодическое обновление геолокации
+            startLocationTracking();
         } else {
             showScreen(1);
         }
     }
 
+    // ===== Геолокация =====
     function requestGeolocation() {
         if (!navigator.geolocation) {
             document.getElementById('geoStatus').innerHTML = '❌ Геолокация не поддерживается';
             return;
         }
         navigator.geolocation.getCurrentPosition(
-            function(pos) {
+            pos => {
                 userCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                document.getElementById('geoStatus').innerHTML = `✅ Местоположение определено (${userCoords.lat.toFixed(4)}, ${userCoords.lon.toFixed(4)})`;
+                document.getElementById('geoStatus').innerHTML =
+                    `✅ Местоположение определено (${userCoords.lat.toFixed(4)}, ${userCoords.lon.toFixed(4)})`;
                 if (marker && mapReady) {
                     marker.setLatLng([userCoords.lat, userCoords.lon]);
                     map.setView([userCoords.lat, userCoords.lon], 14);
                 }
             },
-            function(err) {
+            () => {
                 document.getElementById('geoStatus').innerHTML = '⚠️ Доступ запрещён. Нажмите "Запросить геолокацию".';
             },
             { enableHighAccuracy: true, timeout: 10000 }
         );
     }
 
+    // ===== Экраны =====
     function showScreen(num) {
         document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
         document.getElementById('screen' + num).classList.add('active');
     }
-
     function goToScreen(num) {
         if (num === 2) {
             const seeker = document.getElementById('seeker_id').value.trim();
-            if (!seeker) { alert('Введите ID искателя'); return; }
+            if (!seeker) { alert('Введите ваш ID'); return; }
+            seekerId = parseInt(seeker);
+            localStorage.setItem('seekerId', seekerId);
             requestGeolocation();
         }
         showScreen(num);
     }
 
-    function sendTelegramMessage(chatId, text, roleForButton) {
-        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-        const webAppUrl = APP_URL + `?role=${roleForButton}`;
-        const payload = {
-            chat_id: chatId,
-            text: text,
-            reply_markup: {
-                inline_keyboard: [[{ text: '🗺️ Открыть карту', web_app: { url: webAppUrl } }]]
-            }
+    // ===== Управление прячущимися =====
+    function generateId() { return Date.now() + Math.random(); }
+
+    function addHiderManual() {
+        const name = document.getElementById('hider_name').value.trim() || 'Игрок';
+        // Открываем модалку для ввода координат
+        document.getElementById('editName').value = name;
+        document.getElementById('editLat').value = '';
+        document.getElementById('editLon').value = '';
+        document.getElementById('coordModal').classList.add('active');
+    }
+
+    function addHiderGeo() {
+        const name = document.getElementById('hider_name').value.trim() || 'Игрок';
+        if (!userCoords) {
+            alert('Сначала определите геолокацию');
+            return;
+        }
+        const newHider = {
+            id: generateId(),
+            name: name,
+            lat: userCoords.lat,
+            lon: userCoords.lon
         };
+        hiders.push(newHider);
+        saveAndRender();
+        document.getElementById('hider_name').value = '';
+        showToast(`✅ ${name} добавлен с геолокацией`);
+    }
+
+    function saveEditedHider() {
+        const name = document.getElementById('editName').value.trim();
+        const lat = parseFloat(document.getElementById('editLat').value);
+        const lon = parseFloat(document.getElementById('editLon').value);
+        if (!name || isNaN(lat) || isNaN(lon)) {
+            alert('Введите корректные данные');
+            return;
+        }
+        const newHider = { id: generateId(), name, lat, lon };
+        hiders.push(newHider);
+        saveAndRender();
+        document.getElementById('coordModal').classList.remove('active');
+        showToast(`✅ ${name} добавлен`);
+    }
+
+    function removeHider(id) {
+        hiders = hiders.filter(h => h.id !== id);
+        saveAndRender();
+    }
+
+    function saveAndRender() {
+        localStorage.setItem('hidersData', JSON.stringify(hiders));
+        renderHiderList();
+        if (mapReady) updateMarkers();
+    }
+
+    function renderHiderList() {
+        const container = document.getElementById('hiderList');
+        if (!hiders.length) {
+            container.innerHTML = '<div style="text-align:center;color:#999;padding:10px;">Нет добавленных</div>';
+            return;
+        }
+        container.innerHTML = hiders.map(h =>
+            `<div class="hider-item">
+                <span class="name">${h.name}</span>
+                <span class="coords">${h.lat.toFixed(5)}, ${h.lon.toFixed(5)}</span>
+                <button class="del-btn" onclick="removeHider('${h.id}')">×</button>
+            </div>`
+        ).join('');
+    }
+
+    // ===== Карта =====
+    function initMap() {
+        if (mapReady) return;
+        try {
+            const center = userCoords ? [userCoords.lat, userCoords.lon] : [53.1389, 29.2211];
+            map = L.map('map').setView(center, 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(map);
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri'
+            }).addTo(map);
+
+            // Маркер пользователя
+            const icon = L.divIcon({
+                className: 'custom-div-icon',
+                html: '<div style="background:#ff4444;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            marker = L.marker(center, { icon, draggable: false }).addTo(map).bindPopup('Вы здесь');
+
+            updateMarkers();
+            mapReady = true;
+            document.getElementById('map-error').style.display = 'none';
+            document.getElementById('status').innerText = 'Карта загружена';
+        } catch (e) {
+            document.getElementById('map-error').style.display = 'block';
+            document.getElementById('status').innerText = '❌ Ошибка карты. Проверьте интернет.';
+        }
+    }
+
+    function updateMarkers() {
+        if (!mapReady) return;
+        // Удаляем старые метки прячущихся
+        map.eachLayer(layer => {
+            if (layer.options && layer.options._hiderId) {
+                map.removeLayer(layer);
+            }
+        });
+        // Добавляем новые
+        const iconHider = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background:#2a8cff;width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(0,0,0,0.3);"></div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+        hiders.forEach(h => {
+            const m = L.marker([h.lat, h.lon], { icon: iconHider, _hiderId: h.id })
+                .addTo(map)
+                .bindPopup(`<b>${h.name}</b><br>${h.lat.toFixed(5)}, ${h.lon.toFixed(5)}`);
+        });
+    }
+
+    // ===== Отслеживание для прячущихся =====
+    function startLocationTracking() {
+        if (!navigator.geolocation) {
+            document.getElementById('status').innerText = '❌ Геолокация не поддерживается';
+            return;
+        }
+        navigator.geolocation.watchPosition(
+            pos => {
+                // Обновляем координаты первого прячущегося (себя)
+                if (hiders.length > 0) {
+                    hiders[0].lat = pos.coords.latitude;
+                    hiders[0].lon = pos.coords.longitude;
+                    saveAndRender();
+                    if (marker && mapReady) {
+                        marker.setLatLng([pos.coords.latitude, pos.coords.longitude]);
+                        map.setView([pos.coords.latitude, pos.coords.longitude], 14);
+                    }
+                    document.getElementById('status').innerText =
+                        `📍 Обновлено: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+                }
+            },
+            () => { document.getElementById('status').innerText = '⚠️ Ошибка получения координат.'; },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+        );
+    }
+
+    // ===== Отправка сообщений через Bot API =====
+    function sendTelegramMessage(chatId, text, parseMode = '') {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+        const payload = { chat_id: chatId, text };
+        if (parseMode) payload.parse_mode = parseMode;
         return fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -263,19 +535,131 @@
         .then(res => res.json())
         .then(data => {
             if (!data.ok) {
-                console.warn(`Ошибка для ${chatId}:`, data.description);
-                showToast(`⚠️ Не удалось отправить пользователю ${chatId}. Убедитесь, что он начал диалог с ботом.`);
-            } else {
-                console.log(`✅ Отправлено ${chatId}`);
+                console.warn('Ошибка отправки:', data.description);
+                showToast('⚠️ Не удалось отправить сообщение. Проверьте ID.');
+                return false;
             }
-            return data;
+            return true;
         })
-        .catch(err => {
-            console.error('Ошибка fetch:', err);
-            showToast('❌ Ошибка сети при отправке уведомлений');
-        });
+        .catch(() => { showToast('❌ Ошибка сети'); return false; });
     }
 
+    function sendLocation(chatId, lat, lon) {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendLocation`;
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, latitude: lat, longitude: lon })
+        })
+        .then(res => res.json())
+        .then(data => data.ok)
+        .catch(() => false);
+    }
+
+    // ===== Отправка координат искателю =====
+    async function sendAllLocations() {
+        if (!seekerId) {
+            const id = document.getElementById('seeker_id').value.trim();
+            if (id) seekerId = parseInt(id);
+            else return;
+        }
+        if (!hiders.length) {
+            showToast('Нет прячущихся для отправки');
+            return;
+        }
+        let success = true;
+        for (const h of hiders) {
+            const text = `📍 <b>${h.name}</b> находится здесь:`;
+            const ok1 = await sendTelegramMessage(seekerId, text, 'HTML');
+            const ok2 = await sendLocation(seekerId, h.lat, h.lon);
+            if (!ok1 || !ok2) success = false;
+        }
+        if (success) {
+            showToast(`✅ Координаты отправлены искателю (${hiders.length} человек)`);
+        } else {
+            showToast('⚠️ Часть сообщений не доставлена');
+        }
+    }
+
+    function sendManualUpdate() {
+        sendAllLocations();
+    }
+
+    function startAutoSend() {
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(sendAllLocations, 120000); // 2 минуты
+        showToast('🔄 Автоотправка каждые 2 минуты запущена');
+    }
+
+    // ===== Проверка геолокации =====
+    function openCheckModal() {
+        document.getElementById('checkModal').classList.add('active');
+        document.getElementById('checkLat').value = '';
+        document.getElementById('checkLon').value = '';
+    }
+    function closeCheckModal() {
+        document.getElementById('checkModal').classList.remove('active');
+    }
+
+    function checkLocation() {
+        const lat = parseFloat(document.getElementById('checkLat').value);
+        const lon = parseFloat(document.getElementById('checkLon').value);
+        if (isNaN(lat) || isNaN(lon)) {
+            alert('Введите корректные координаты');
+            return;
+        }
+
+        // Ставим метку на карте
+        if (checkMarker) map.removeLayer(checkMarker);
+        const icon = L.divIcon({
+            className: 'custom-div-icon',
+            html: '<div style="background:#ffaa00;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+        checkMarker = L.marker([lat, lon], { icon, draggable: false }).addTo(map)
+            .bindPopup('Проверяемая точка');
+        map.setView([lat, lon], 16);
+
+        // Ищем совпадения
+        const found = hiders.filter(h =>
+            Math.abs(h.lat - lat) < 0.00001 && Math.abs(h.lon - lon) < 0.00001
+        );
+        if (found.length) {
+            const names = found.map(h => h.name).join(', ');
+            showToast(`✅ Найдено: ${names}`);
+        } else {
+            showToast('❌ Никого не найдено');
+        }
+        closeCheckModal();
+    }
+
+    // ===== Модалка для ручного ввода =====
+    function closeCoordModal() {
+        document.getElementById('coordModal').classList.remove('active');
+    }
+
+    // ===== Запуск игры =====
+    function startGame() {
+        if (!seekerId) {
+            const id = document.getElementById('seeker_id').value.trim();
+            if (!id) { alert('Введите ID искателя'); return; }
+            seekerId = parseInt(id);
+            localStorage.setItem('seekerId', seekerId);
+        }
+        if (!hiders.length) {
+            alert('Добавьте хотя бы одного прячущегося');
+            return;
+        }
+        showScreen(3);
+        initMap();
+        document.getElementById('status').innerText = 'Игра началась! Отправка координат каждые 2 минуты.';
+        startAutoSend();
+        // Отправляем первый раз сразу
+        setTimeout(sendAllLocations, 2000);
+    }
+
+    // ===== Toast =====
     function showToast(msg) {
         const el = document.getElementById('toast');
         el.textContent = msg;
@@ -283,29 +667,8 @@
         setTimeout(() => el.classList.remove('show'), 5000);
     }
 
-    function startGame() {
-        const seeker = document.getElementById('seeker_id').value.trim();
-        const hidersRaw = document.getElementById('hiders_ids').value.trim();
-        if (!seeker || !hidersRaw) { alert('Заполните все поля'); return; }
-        if (isNaN(seeker)) { alert('ID искателя должен быть числом'); return; }
-        const hiders = hidersRaw.split(',').map(s => s.trim()).filter(s => s && !isNaN(s));
-        if (!hiders.length) { alert('Введите хотя бы одного прячущегося'); return; }
-
-        // Сообщаем боту
-        const payload = {
-            action: 'start_game',
-            seeker_id: parseInt(seeker),
-            hiders: hiders.join(',')
-        };
-        tg.sendData(JSON.stringify(payload));
-
-        // Отправляем уведомления
-        const messageText = '🎮 Игра в прятки началась! Нажмите кнопку, чтобы открыть карту.';
-        const allParticipants = [parseInt(seeker), ...hiders.map(Number)];
-        const promises = allParticipants.map(chatId => {
-            const roleForButton = (chatId === parseInt(seeker)) ? 'seeker' : 'hider';
-            return sendTelegramMessage(chatId, messageText, roleForButton);
-        });
-
-        Promise.all(promises).then(() => {
-            showToast('✅ Уведомления отправлены всем участникам!
+    // ===== Запуск =====
+    init();
+</script>
+</body>
+</html>
