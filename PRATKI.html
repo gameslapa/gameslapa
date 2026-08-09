@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Прятки в Бобруйске</title>
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -118,10 +116,23 @@
             display: inline-block;
             margin: 5px auto;
         }
-        #geoRequestBtn {
-            background: #4CAF50;
-            margin-top: 5px;
+        #geoRequestBtn { background: #4CAF50; margin-top: 5px; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: #333;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 999;
+            pointer-events: none;
         }
+        .toast.show { opacity: 1; }
     </style>
 </head>
 <body>
@@ -164,16 +175,23 @@
     </div>
 </div>
 
+<!-- Toast-уведомление -->
+<div id="toast" class="toast"></div>
+
 <!-- Telegram WebApp SDK -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 <script>
+    // --- КОНФИГУРАЦИЯ ---
+    const BOT_TOKEN = '8817333207:AAHvIQOGdt8Sqr51RsKmmcbVie5wLn3f_38';  // ваш токен
+    const APP_URL = window.location.origin + window.location.pathname;
+
     // --- Глобальные переменные ---
     let tg = window.Telegram.WebApp;
     let map = null;
     let marker = null;
     let watchId = null;
-    let role = null;          // 'seeker' или 'hider'
+    let role = null;
     let mapReady = false;
     let userCoords = null;
 
@@ -241,7 +259,49 @@
         showScreen(num);
     }
 
-    // --- Запуск игры (отправка данных боту) ---
+    // --- Отправка сообщения через Telegram Bot API ---
+    function sendTelegramMessage(chatId, text, roleForButton) {
+        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+        const webAppUrl = APP_URL + `?role=${roleForButton}`;
+        const payload = {
+            chat_id: chatId,
+            text: text,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🗺️ Открыть карту', web_app: { url: webAppUrl } }]
+                ]
+            }
+        };
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.ok) {
+                console.warn(`Ошибка отправки для ${chatId}:`, data.description);
+                showToast(`⚠️ Не удалось отправить сообщение пользователю ${chatId}. Убедитесь, что он начал диалог с ботом.`);
+            } else {
+                console.log(`✅ Сообщение отправлено ${chatId}`);
+            }
+            return data;
+        })
+        .catch(err => {
+            console.error('Ошибка fetch:', err);
+            showToast('❌ Ошибка сети при отправке уведомлений');
+        });
+    }
+
+    // --- Показать toast-сообщение ---
+    function showToast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 5000);
+    }
+
+    // --- Запуск игры ---
     function startGame() {
         const seeker = document.getElementById('seeker_id').value.trim();
         const hidersRaw = document.getElementById('hiders_ids').value.trim();
@@ -250,7 +310,7 @@
         const hiders = hidersRaw.split(',').map(s => s.trim()).filter(s => s && !isNaN(s));
         if (!hiders.length) { alert('Введите хотя бы одного прячущегося'); return; }
 
-        // Отправляем данные боту – бот сам разошлёт уведомления и запустит периодическую отправку координат
+        // 1. Уведомляем бота о создании игры (для периодической отправки координат)
         const payload = {
             action: 'start_game',
             seeker_id: parseInt(seeker),
@@ -258,10 +318,24 @@
         };
         tg.sendData(JSON.stringify(payload));
 
-        // Переходим на карту (для организатора)
+        // 2. Отправляем уведомления всем участникам через Bot API
+        const messageText = '🎮 Игра в прятки началась! Нажмите кнопку, чтобы открыть карту.';
+        const allParticipants = [parseInt(seeker), ...hiders.map(Number)];
+        const promises = allParticipants.map(chatId => {
+            const roleForButton = (chatId === parseInt(seeker)) ? 'seeker' : 'hider';
+            return sendTelegramMessage(chatId, messageText, roleForButton);
+        });
+
+        Promise.all(promises).then(() => {
+            showToast('✅ Уведомления отправлены всем участникам!');
+        }).catch(() => {
+            showToast('⚠️ Некоторые уведомления не доставлены. Проверьте консоль.');
+        });
+
+        // 3. Показываем карту организатору
         showScreen(3);
         initMap();
-        document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления от бота.';
+        document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления.';
     }
 
     // --- Инициализация карты (Leaflet + OSM + спутник Esri) ---
@@ -271,17 +345,14 @@
             const center = userCoords ? [userCoords.lat, userCoords.lon] : [53.1389, 29.2211];
             map = L.map('map').setView(center, 14);
 
-            // Основной слой (подписи)
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap'
             }).addTo(map);
 
-            // Спутниковый слой (Esri)
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri'
             }).addTo(map);
 
-            // Маркер пользователя
             const icon = L.divIcon({
                 className: 'custom-div-icon',
                 html: '<div style="background:#ff4444;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
