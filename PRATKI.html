@@ -168,10 +168,6 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
 <script>
-    // --- КОНФИГУРАЦИЯ ---
-    const BOT_TOKEN = '8817333207:AAHvIQOGdt8Sqr51RsKmmcbVie5wLn3f_38';  // ваш токен
-    const APP_URL = window.location.origin + window.location.pathname; // базовый URL приложения
-
     // --- Глобальные переменные ---
     let tg = window.Telegram.WebApp;
     let map = null;
@@ -187,10 +183,9 @@
         requestGeolocation();
 
         const params = new URLSearchParams(window.location.search);
-        role = params.get('role');   // если есть параметр role, значит пришли по кнопке
+        role = params.get('role');
 
         if (role) {
-            // Сразу показываем карту
             showScreen(3);
             initMap();
             if (role === 'hider') {
@@ -241,38 +236,12 @@
         if (num === 2) {
             const seeker = document.getElementById('seeker_id').value.trim();
             if (!seeker) { alert('Введите ID искателя'); return; }
-            requestGeolocation(); // повторный запрос по действию пользователя
+            requestGeolocation();
         }
         showScreen(num);
     }
 
-    // --- Отправка сообщения через Telegram Bot API ---
-    function sendTelegramMessage(chatId, text, roleForButton) {
-        const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-        const webAppUrl = APP_URL + `?role=${roleForButton}`;
-        const payload = {
-            chat_id: chatId,
-            text: text,
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '🗺️ Открыть карту', web_app: { url: webAppUrl } }]
-                ]
-            }
-        };
-        return fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (!data.ok) console.warn('Ошибка отправки для', chatId, data.description);
-            return data;
-        })
-        .catch(err => console.error('Ошибка fetch:', err));
-    }
-
-    // --- Запуск игры ---
+    // --- Запуск игры (отправка данных боту) ---
     function startGame() {
         const seeker = document.getElementById('seeker_id').value.trim();
         const hidersRaw = document.getElementById('hiders_ids').value.trim();
@@ -281,7 +250,7 @@
         const hiders = hidersRaw.split(',').map(s => s.trim()).filter(s => s && !isNaN(s));
         if (!hiders.length) { alert('Введите хотя бы одного прячущегося'); return; }
 
-        // 1. Сообщаем боту о создании игры (через WebApp)
+        // Отправляем данные боту – бот сам разошлёт уведомления и запустит периодическую отправку координат
         const payload = {
             action: 'start_game',
             seeker_id: parseInt(seeker),
@@ -289,22 +258,10 @@
         };
         tg.sendData(JSON.stringify(payload));
 
-        // 2. Отправляем уведомления всем участникам через Bot API
-        const messageText = '🎮 Игра в прятки началась! Нажмите кнопку, чтобы открыть карту.';
-        const allParticipants = [parseInt(seeker), ...hiders.map(Number)];
-        const promises = allParticipants.map(chatId => {
-            const roleForButton = (chatId === parseInt(seeker)) ? 'seeker' : 'hider';
-            return sendTelegramMessage(chatId, messageText, roleForButton);
-        });
-
-        Promise.all(promises).then(() => {
-            console.log('Все уведомления отправлены');
-        }).catch(err => console.error('Ошибка при рассылке:', err));
-
-        // 3. Показываем карту текущему пользователю (организатору)
+        // Переходим на карту (для организатора)
         showScreen(3);
         initMap();
-        document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления.';
+        document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления от бота.';
     }
 
     // --- Инициализация карты (Leaflet + OSM + спутник Esri) ---
@@ -324,7 +281,7 @@
                 attribution: 'Tiles &copy; Esri'
             }).addTo(map);
 
-            // Маркер
+            // Маркер пользователя
             const icon = L.divIcon({
                 className: 'custom-div-icon',
                 html: '<div style="background:#ff4444;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
@@ -346,7 +303,7 @@
         }
     }
 
-    // --- Отслеживание для прячущихся (отправка координат через WebApp) ---
+    // --- Отслеживание для прячущихся ---
     function startLocationTracking() {
         if (!navigator.geolocation) {
             document.getElementById('status').innerText = '❌ Геолокация не поддерживается';
