@@ -229,7 +229,7 @@
         <h2>🗺️ Бобруйск</h2>
         <div style="display:flex; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
             <button class="btn btn-secondary" style="flex:1;" onclick="openCheckModal()">🔍 Проверить геолокацию</button>
-            <button class="btn btn-secondary" style="flex:1;" onclick="sendManualUpdate()">📤 Отправить координаты сейчас</button>
+            <button class="btn btn-secondary" style="flex:1;" onclick="sendAllLocations()">📤 Отправить координаты сейчас</button>
         </div>
         <div id="map"></div>
         <div id="map-error" class="error-msg">⚠️ Не удалось загрузить карту. Проверьте интернет.</div>
@@ -325,7 +325,6 @@
             showScreen(3);
             initMap();
             document.getElementById('status').innerText = '📍 Вы прячетесь. Ваша геолокация отправлена.';
-            // Запускаем периодическое обновление геолокации
             startLocationTracking();
         } else {
             showScreen(1);
@@ -376,7 +375,6 @@
 
     function addHiderManual() {
         const name = document.getElementById('hider_name').value.trim() || 'Игрок';
-        // Открываем модалку для ввода координат
         document.getElementById('editName').value = name;
         document.getElementById('editLat').value = '';
         document.getElementById('editLon').value = '';
@@ -455,7 +453,6 @@
                 attribution: 'Tiles &copy; Esri'
             }).addTo(map);
 
-            // Маркер пользователя
             const icon = L.divIcon({
                 className: 'custom-div-icon',
                 html: '<div style="background:#ff4444;width:20px;height:20px;border-radius:50%;border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.5);"></div>',
@@ -476,13 +473,12 @@
 
     function updateMarkers() {
         if (!mapReady) return;
-        // Удаляем старые метки прячущихся
+        // Удаляем старые метки прячущихся (кроме маркера пользователя и чек-маркера)
         map.eachLayer(layer => {
             if (layer.options && layer.options._hiderId) {
                 map.removeLayer(layer);
             }
         });
-        // Добавляем новые
         const iconHider = L.divIcon({
             className: 'custom-div-icon',
             html: '<div style="background:#2a8cff;width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 8px rgba(0,0,0,0.3);"></div>',
@@ -504,7 +500,6 @@
         }
         navigator.geolocation.watchPosition(
             pos => {
-                // Обновляем координаты первого прячущегося (себя)
                 if (hiders.length > 0) {
                     hiders[0].lat = pos.coords.latitude;
                     hiders[0].lon = pos.coords.longitude;
@@ -561,7 +556,10 @@
         if (!seekerId) {
             const id = document.getElementById('seeker_id').value.trim();
             if (id) seekerId = parseInt(id);
-            else return;
+            else {
+                showToast('⚠️ Не указан ID искателя');
+                return;
+            }
         }
         if (!hiders.length) {
             showToast('Нет прячущихся для отправки');
@@ -579,10 +577,6 @@
         } else {
             showToast('⚠️ Часть сообщений не доставлена');
         }
-    }
-
-    function sendManualUpdate() {
-        sendAllLocations();
     }
 
     function startAutoSend() {
@@ -621,7 +615,7 @@
             .bindPopup('Проверяемая точка');
         map.setView([lat, lon], 16);
 
-        // Ищем совпадения
+        // Ищем совпадения (погрешность 0.00001°)
         const found = hiders.filter(h =>
             Math.abs(h.lat - lat) < 0.00001 && Math.abs(h.lon - lon) < 0.00001
         );
