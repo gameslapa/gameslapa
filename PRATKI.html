@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Прятки в Бобруйске</title>
-    <!-- Яндекс.Карты (замените YOUR_API_KEY на свой ключ) -->
-    <script src="https://api-maps.yandex.ru/2.1/?apikey=YOUR_API_KEY&lang=ru_RU" type="text/javascript"></script>
+    <!-- ВСТАВЬТЕ СВОЙ API-КЛЮЧ ЯНДЕКС.КАРТ -->
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=ВАШ_КЛЮЧ_ЯНДЕКСА&lang=ru_RU" type="text/javascript"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -34,18 +34,14 @@
             padding: 20px;
             overflow-y: auto;
         }
-        .screen.active {
-            display: flex;
-        }
+        .screen.active { display: flex; }
         .screen h2 {
             text-align: center;
             margin-top: 20px;
             margin-bottom: 30px;
             color: #333;
         }
-        .input-group {
-            margin-bottom: 20px;
-        }
+        .input-group { margin-bottom: 20px; }
         .input-group label {
             display: block;
             font-weight: 600;
@@ -61,9 +57,7 @@
             outline: none;
             transition: border 0.2s;
         }
-        .input-group input:focus {
-            border-color: #2a8cff;
-        }
+        .input-group input:focus { border-color: #2a8cff; }
         .btn {
             width: 100%;
             padding: 16px;
@@ -77,17 +71,14 @@
             transition: background 0.2s;
             margin-top: 10px;
         }
-        .btn:hover {
-            background: #1a6fcf;
-        }
-        .btn:active {
-            transform: scale(0.97);
-        }
+        .btn:hover { background: #1a6fcf; }
+        .btn:active { transform: scale(0.97); }
         #map {
             flex: 1;
             min-height: 300px;
             border-radius: 12px;
             margin: 10px 0;
+            background: #e9eef2;
         }
         .status-bar {
             padding: 10px 0;
@@ -106,8 +97,27 @@
             color: #333;
             margin-top: 5px;
         }
-        .back-btn:hover {
-            background: #ddd;
+        .back-btn:hover { background: #ddd; }
+        .error-msg {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+            display: none;
+        }
+        .geo-status {
+            font-size: 13px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: #f0f0f0;
+            display: inline-block;
+            margin: 5px auto;
+        }
+        #geoRequestBtn {
+            background: #4CAF50;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -122,6 +132,9 @@
             <div class="hint">Введите числовой ID пользователя</div>
         </div>
         <button class="btn" onclick="goToScreen(2)">Далее →</button>
+        <div style="text-align:center;margin-top:15px;">
+            <span class="geo-status" id="geoStatus">📍 Определение местоположения...</span>
+        </div>
     </div>
 
     <!-- Экран 2: ввод прячущихся -->
@@ -134,12 +147,16 @@
         </div>
         <button class="btn" onclick="startGame()">🚀 Начать игру</button>
         <button class="btn back-btn" onclick="goToScreen(1)">← Назад</button>
+        <div style="text-align:center;margin-top:10px;">
+            <button class="btn" id="geoRequestBtn" onclick="requestGeolocation()">📍 Запросить геолокацию</button>
+        </div>
     </div>
 
     <!-- Экран 3: карта -->
     <div id="screen3" class="screen">
         <h2>🗺️ Бобруйск</h2>
         <div id="map"></div>
+        <div id="map-error" class="error-msg">⚠️ Не удалось загрузить карту. Проверьте интернет и API-ключ.</div>
         <div class="status-bar" id="status">Загрузка карты...</div>
     </div>
 </div>
@@ -154,18 +171,20 @@
     let placemark = null;
     let watchId = null;
     let gameId = null;
-    let role = null;          // 'seeker' или 'hider'
+    let role = null;
+    let mapReady = false;
+    let userCoords = null;
 
     // --- Инициализация ---
     function init() {
         tg.ready();
-        // Проверяем параметры URL (приходят от бота)
+        requestGeolocation();
+
         const params = new URLSearchParams(window.location.search);
         gameId = params.get('game_id');
         role = params.get('role');
 
         if (gameId && role) {
-            // Переходим сразу на карту
             showScreen(3);
             initMap();
             if (role === 'hider') {
@@ -179,6 +198,33 @@
         }
     }
 
+    // --- Запрос геолокации ---
+    function requestGeolocation() {
+        if (!navigator.geolocation) {
+            document.getElementById('geoStatus').innerHTML = '❌ Геолокация не поддерживается';
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            function(pos) {
+                userCoords = {
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude
+                };
+                document.getElementById('geoStatus').innerHTML =
+                    `✅ Местоположение определено (${userCoords.lat.toFixed(4)}, ${userCoords.lon.toFixed(4)})`;
+                if (placemark && mapReady) {
+                    placemark.geometry.setCoordinates([userCoords.lat, userCoords.lon]);
+                    map.setCenter([userCoords.lat, userCoords.lon], 14);
+                }
+            },
+            function(err) {
+                console.warn('Геолокация отклонена:', err);
+                document.getElementById('geoStatus').innerHTML = '⚠️ Доступ запрещён. Нажмите "Запросить геолокацию".';
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    }
+
     // --- Переключение экранов ---
     function showScreen(num) {
         document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
@@ -188,31 +234,20 @@
     function goToScreen(num) {
         if (num === 2) {
             const seeker = document.getElementById('seeker_id').value.trim();
-            if (!seeker) {
-                alert('Введите ID искателя');
-                return;
-            }
+            if (!seeker) { alert('Введите ID искателя'); return; }
+            requestGeolocation(); // повторный запрос по действию пользователя
         }
         showScreen(num);
     }
 
-    // --- Запуск игры (отправка данных боту) ---
+    // --- Запуск игры (отправка боту) ---
     function startGame() {
         const seeker = document.getElementById('seeker_id').value.trim();
         const hidersRaw = document.getElementById('hiders_ids').value.trim();
-        if (!seeker || !hidersRaw) {
-            alert('Заполните все поля');
-            return;
-        }
-        if (isNaN(seeker)) {
-            alert('ID искателя должен быть числом');
-            return;
-        }
+        if (!seeker || !hidersRaw) { alert('Заполните все поля'); return; }
+        if (isNaN(seeker)) { alert('ID искателя должен быть числом'); return; }
         const hiders = hidersRaw.split(',').map(s => s.trim()).filter(s => s && !isNaN(s));
-        if (hiders.length === 0) {
-            alert('Введите хотя бы одного прячущегося');
-            return;
-        }
+        if (!hiders.length) { alert('Введите хотя бы одного прячущегося'); return; }
         const payload = {
             action: 'start_game',
             seeker_id: parseInt(seeker),
@@ -225,79 +260,64 @@
         document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления.';
     }
 
-    // --- Инициализация карты (Яндекс) ---
+    // --- Карта ---
     function initMap() {
-        ymaps.ready(function() {
-            // Бобруйск: 53.1389, 29.2211
-            const center = [53.1389, 29.2211];
-            map = new ymaps.Map('map', {
-                center: center,
-                zoom: 14,
-                controls: ['zoomControl', 'fullscreenControl']
-            });
-            map.setType('satellite');   // спутниковый вид
+        if (mapReady) return;
+        try {
+            ymaps.ready(function() {
+                let center = userCoords ? [userCoords.lat, userCoords.lon] : [53.1389, 29.2211];
+                map = new ymaps.Map('map', {
+                    center: center,
+                    zoom: 14,
+                    controls: ['zoomControl', 'fullscreenControl']
+                });
+                map.setType('satellite');
 
-            // Метка пользователя (красная)
-            placemark = new ymaps.Placemark(center, {
-                hintContent: 'Вы здесь',
-            }, {
-                preset: 'islands#redCircleIcon',
-                draggable: false
-            });
-            map.geoObjects.add(placemark);
+                placemark = new ymaps.Placemark(center, {
+                    hintContent: 'Вы здесь',
+                }, {
+                    preset: 'islands#redCircleIcon',
+                    draggable: false
+                });
+                map.geoObjects.add(placemark);
 
-            // Получить текущую позицию и переместить метку
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(pos) {
-                        const coords = [pos.coords.latitude, pos.coords.longitude];
-                        placemark.geometry.setCoordinates(coords);
-                        map.setCenter(coords, 14);
-                    },
-                    function(err) {
-                        console.warn('Геолокация недоступна:', err);
-                        document.getElementById('status').innerText = '⚠️ Не удалось определить местоположение. Проверьте разрешения.';
-                    },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
-            }
-        });
+                if (!userCoords) requestGeolocation();
+
+                mapReady = true;
+                document.getElementById('map-error').style.display = 'none';
+                document.getElementById('status').innerText = 'Карта загружена';
+            });
+        } catch (e) {
+            document.getElementById('map-error').style.display = 'block';
+            document.getElementById('status').innerText = '❌ Ошибка карты. Проверьте API-ключ.';
+        }
     }
 
-    // --- Отслеживание геолокации для прячущихся ---
+    // --- Отслеживание для прячущихся ---
     function startLocationTracking() {
         if (!navigator.geolocation) {
-            document.getElementById('status').innerText = '❌ Ваш браузер не поддерживает геолокацию.';
+            document.getElementById('status').innerText = '❌ Геолокация не поддерживается';
             return;
         }
-
-        function sendLocation(lat, lon) {
-            const payload = {
-                action: 'update_location',
-                lat: lat,
-                lon: lon
-            };
-            tg.sendData(JSON.stringify(payload));
-            if (placemark) {
-                placemark.geometry.setCoordinates([lat, lon]);
-                map.setCenter([lat, lon], 14);
-            }
-            document.getElementById('status').innerText = `📍 Отправлено: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
-        }
-
         watchId = navigator.geolocation.watchPosition(
             function(pos) {
-                sendLocation(pos.coords.latitude, pos.coords.longitude);
+                const payload = {
+                    action: 'update_location',
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude
+                };
+                tg.sendData(JSON.stringify(payload));
+                if (placemark && mapReady) {
+                    placemark.geometry.setCoordinates([pos.coords.latitude, pos.coords.longitude]);
+                    map.setCenter([pos.coords.latitude, pos.coords.longitude], 14);
+                }
+                document.getElementById('status').innerText =
+                    `📍 Отправлено: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
             },
             function(err) {
-                console.error('Ошибка геолокации:', err);
-                document.getElementById('status').innerText = '⚠️ Ошибка получения координат. Перезапустите приложение.';
+                document.getElementById('status').innerText = '⚠️ Ошибка получения координат.';
             },
-            {
-                enableHighAccuracy: true,
-                timeout: 15000,
-                maximumAge: 30000
-            }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
         );
     }
 
