@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Прятки в Бобруйске</title>
+    <!-- Яндекс.Карты (замените YOUR_API_KEY на свой ключ) -->
+    <script src="https://api-maps.yandex.ru/2.1/?apikey=YOUR_API_KEY&lang=ru_RU" type="text/javascript"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 480px;
+            height: 100vh;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+        .screen {
+            display: none;
+            flex-direction: column;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .screen.active {
+            display: flex;
+        }
+        .screen h2 {
+            text-align: center;
+            margin-top: 20px;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #555;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .input-group input:focus {
+            border-color: #2a8cff;
+        }
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #2a8cff;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background: #1a6fcf;
+        }
+        .btn:active {
+            transform: scale(0.97);
+        }
+        #map {
+            flex: 1;
+            min-height: 300px;
+            border-radius: 12px;
+            margin: 10px 0;
+        }
+        .status-bar {
+            padding: 10px 0;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            border-top: 1px solid #eee;
+        }
+        .hint {
+            font-size: 14px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .back-btn {
+            background: #eee;
+            color: #333;
+            margin-top: 5px;
+        }
+        .back-btn:hover {
+            background: #ddd;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Экран 1: ввод искателя -->
+    <div id="screen1" class="screen active">
+        <h2>🔍 Кто ищет?</h2>
+        <div class="input-group">
+            <label>Telegram ID искателя</label>
+            <input type="number" id="seeker_id" placeholder="123456789" inputmode="numeric">
+            <div class="hint">Введите числовой ID пользователя</div>
+        </div>
+        <button class="btn" onclick="goToScreen(2)">Далее →</button>
+    </div>
+
+    <!-- Экран 2: ввод прячущихся -->
+    <div id="screen2" class="screen">
+        <h2>🙈 Кто прячется?</h2>
+        <div class="input-group">
+            <label>ID прячущихся (через запятую)</label>
+            <input type="text" id="hiders_ids" placeholder="111, 222, 333">
+            <div class="hint">Перечислите числовые ID через запятую</div>
+        </div>
+        <button class="btn" onclick="startGame()">🚀 Начать игру</button>
+        <button class="btn back-btn" onclick="goToScreen(1)">← Назад</button>
+    </div>
+
+    <!-- Экран 3: карта -->
+    <div id="screen3" class="screen">
+        <h2>🗺️ Бобруйск</h2>
+        <div id="map"></div>
+        <div class="status-bar" id="status">Загрузка карты...</div>
+    </div>
+</div>
+
+<!-- Telegram WebApp SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<script>
+    // --- Глобальные переменные ---
+    let tg = window.Telegram.WebApp;
+    let map = null;
+    let placemark = null;
+    let watchId = null;
+    let gameId = null;
+    let role = null;          // 'seeker' или 'hider'
+
+    // --- Инициализация ---
+    function init() {
+        tg.ready();
+        // Проверяем параметры URL (приходят от бота)
+        const params = new URLSearchParams(window.location.search);
+        gameId = params.get('game_id');
+        role = params.get('role');
+
+        if (gameId && role) {
+            // Переходим сразу на карту
+            showScreen(3);
+            initMap();
+            if (role === 'hider') {
+                startLocationTracking();
+                document.getElementById('status').innerText = '📍 Отправляем вашу геолокацию...';
+            } else {
+                document.getElementById('status').innerText = '👀 Вы искатель, ожидайте координаты прячущихся.';
+            }
+        } else {
+            showScreen(1);
+        }
+    }
+
+    // --- Переключение экранов ---
+    function showScreen(num) {
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        document.getElementById('screen' + num).classList.add('active');
+    }
+
+    function goToScreen(num) {
+        if (num === 2) {
+            const seeker = document.getElementById('seeker_id').value.trim();
+            if (!seeker) {
+                alert('Введите ID искателя');
+                return;
+            }
+        }
+        showScreen(num);
+    }
+
+    // --- Запуск игры (отправка данных боту) ---
+    function startGame() {
+        const seeker = document.getElementById('seeker_id').value.trim();
+        const hidersRaw = document.getElementById('hiders_ids').value.trim();
+        if (!seeker || !hidersRaw) {
+            alert('Заполните все поля');
+            return;
+        }
+        if (isNaN(seeker)) {
+            alert('ID искателя должен быть числом');
+            return;
+        }
+        const hiders = hidersRaw.split(',').map(s => s.trim()).filter(s => s && !isNaN(s));
+        if (hiders.length === 0) {
+            alert('Введите хотя бы одного прячущегося');
+            return;
+        }
+        const payload = {
+            action: 'start_game',
+            seeker_id: parseInt(seeker),
+            hiders: hiders.join(',')
+        };
+        tg.sendData(JSON.stringify(payload));
+
+        showScreen(3);
+        initMap();
+        document.getElementById('status').innerText = 'Игра создана! Участники получат уведомления.';
+    }
+
+    // --- Инициализация карты (Яндекс) ---
+    function initMap() {
+        ymaps.ready(function() {
+            // Бобруйск: 53.1389, 29.2211
+            const center = [53.1389, 29.2211];
+            map = new ymaps.Map('map', {
+                center: center,
+                zoom: 14,
+                controls: ['zoomControl', 'fullscreenControl']
+            });
+            map.setType('satellite');   // спутниковый вид
+
+            // Метка пользователя (красная)
+            placemark = new ymaps.Placemark(center, {
+                hintContent: 'Вы здесь',
+            }, {
+                preset: 'islands#redCircleIcon',
+                draggable: false
+            });
+            map.geoObjects.add(placemark);
+
+            // Получить текущую позицию и переместить метку
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(pos) {
+                        const coords = [pos.coords.latitude, pos.coords.longitude];
+                        placemark.geometry.setCoordinates(coords);
+                        map.setCenter(coords, 14);
+                    },
+                    function(err) {
+                        console.warn('Геолокация недоступна:', err);
+                        document.getElementById('status').innerText = '⚠️ Не удалось определить местоположение. Проверьте разрешения.';
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }
+        });
+    }
+
+    // --- Отслеживание геолокации для прячущихся ---
+    function startLocationTracking() {
+        if (!navigator.geolocation) {
+            document.getElementById('status').innerText = '❌ Ваш браузер не поддерживает геолокацию.';
+            return;
+        }
+
+        function sendLocation(lat, lon) {
+            const payload = {
+                action: 'update_location',
+                lat: lat,
+                lon: lon
+            };
+            tg.sendData(JSON.stringify(payload));
+            if (placemark) {
+                placemark.geometry.setCoordinates([lat, lon]);
+                map.setCenter([lat, lon], 14);
+            }
+            document.getElementById('status').innerText = `📍 Отправлено: ${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        }
+
+        watchId = navigator.geolocation.watchPosition(
+            function(pos) {
+                sendLocation(pos.coords.latitude, pos.coords.longitude);
+            },
+            function(err) {
+                console.error('Ошибка геолокации:', err);
+                document.getElementById('status').innerText = '⚠️ Ошибка получения координат. Перезапустите приложение.';
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 30000
+            }
+        );
+    }
+
+    // --- Запуск ---
+    init();
+</script>
+</body>
+</html>
